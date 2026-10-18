@@ -1,7 +1,7 @@
 # Model Configuration Selector
 model_setting:
   # Options: "gemini" or "ollama"
-  provider: "ollama"
+  provider: "gemini"
   # Options: "qwen" or "llama" (Only used if provider is "ollama")
   local_model: "llama"
 
