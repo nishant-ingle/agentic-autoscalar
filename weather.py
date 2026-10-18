@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
 from langchain.tools import tool, ToolRuntime
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -16,33 +17,26 @@ with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 provider = config["model_setting"]["provider"]
+provider_key = config["model_setting"]["provider"]
 
-# 2. Decoupled Model Factory Initialization
-if provider == "gemini":
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    
+# 2. Resolve model name and provider for init_chat_model
+if provider_key == "gemini":
     model_name = config["providers"]["gemini"]["model_name"]
-    llm = ChatGoogleGenerativeAI(model=model_name, thinking_level="low")
+    model_provider = "google_genai"
     print(f"☁️ Initialized Cloud Provider: Gemini ({model_name})")
 
-elif provider == "ollama":
-    from langchain_ollama import ChatOllama
-
-    # 1. Read which specific local model you want to run
+elif provider_key == "ollama":
     selected_local = config["model_setting"]["local_model"]
-
-    # 2. Extract the exact Ollama tag from your config dictionary
     if selected_local in config["providers"]["ollama"]["models"]:
         model_name = config["providers"]["ollama"]["models"][selected_local]
     else:
         raise ValueError(f"Unknown local model option: '{selected_local}'")
-
-    # 3. Instantiate the model
-    llm = ChatOllama(model=model_name)
+    
+    model_provider = "ollama"
     print(f"🤖 Initialized Local Provider: Ollama -> {selected_local.upper()} ({model_name})")
 
 else:
-    raise ValueError(f"Unknown provider '{provider}' set in config.yaml")
+    raise ValueError(f"Unknown provider '{provider_key}' set in config.yaml")
 
 
 @dataclass
@@ -77,6 +71,11 @@ def locate_user(runtime: ToolRuntime[Context]):
 
 
 checkpointer = InMemorySaver()
+llm = init_chat_model(
+    model=model_name,
+    model_provider=model_provider,
+    temperature=0.1 # Optional extra kwargs if needed
+)
 
 agent = create_agent(
     model=llm,
