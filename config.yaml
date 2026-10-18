@@ -3,7 +3,7 @@ model_setting:
   # Options: "gemini" or "ollama"
   provider: "ollama"
   # Options: "qwen" or "llama" (Only used if provider is "ollama")
-  local_model: "qwen"
+  local_model: "llama"
 
 # Specific Provider Settings
 providers:
