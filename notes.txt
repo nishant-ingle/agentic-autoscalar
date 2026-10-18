@@ -1,0 +1,225 @@
+# Gemini Link
+
+https://share.gemini.google/yX84DZlr7WAG
+
+# User Stories
+
+Here is a fully detailed, production-grade Jira-style backlog for your **Agent-Driven Kubernetes Autoscaler & Evaluation Framework**.
+
+Every user story is structured with precise acceptance criteria, pre-requisites, and technical subtasks to target both **enterprise software engineering standards** (Go, Kubebuilder, FastAPI, PostgreSQL) and **empirical research goals** (TUM PhD standard evaluation).
+
+---
+
+## Epic 1: Infrastructure Baseline & Target Telemetry Setup
+
+### **US-101: Target Microservice Deployment & Prometheus Instrumentation**
+
+* **ID:** `AUTOSCALE-101`
+* **Type:** Task / Infrastructure
+* **Priority:** High
+* **As an** infrastructure engineer,
+* **I want** to deploy a sample stateful/stateless microservice on a local Kubernetes cluster (K3D/Minikube) backed by a Prometheus metrics exporter,
+* **So that** I have a live target workload generating real-time CPU, memory, and latency metrics for downstream scaling tests.
+
+#### **Pre-requisites:**
+
+* Local cluster environment initialized (K3D or Minikube).
+* Helm CLI and Prometheus Operator charts ready.
+
+#### **Detailed Subtasks:**
+
+1. Write a containerized target service (e.g., a Go or Spring Boot HTTP API configured with artificial CPU load endpoints).
+2. Create Kubernetes Deployment and ClusterIP manifests specifying resource requests and limits (`resources.requests.cpu`).
+3. Deploy Prometheus Operator / kube-prometheus-stack via Helm.
+4. Verify that Prometheus scrapers successfully ingest custom pod-level and node-level metrics every 15 seconds.
+
+#### **Acceptance Criteria:**
+
+* [ ] Target application successfully runs on the K3D cluster with healthy replica status.
+* [ ] Prometheus targets view confirms scrapers are active and polling metrics successfully.
+* [ ] Grafana dashboard connected to Prometheus displays real-time CPU utilization and request throughput charts.
+
+---
+
+## Epic 2: Control Plane Foundation (Go / Kubebuilder)
+
+### **US-201: Scaffold Custom Operator via Kubebuilder (`client-go`)**
+
+* **ID:** `AUTOSCALE-201`
+* **Type:** Feature / Control Plane
+* **Priority:** High
+* **As a** systems engineer,
+* **I want** to scaffold a custom Kubernetes controller using **Kubebuilder (Go)**,
+* **So that** I have an industrial-grade `client-go` reconciliation loop capable of monitoring cluster metrics and modifying deployment replica specs.
+
+#### **Pre-requisites:**
+
+* Go toolchain (v1.21+) and Kubebuilder CLI installed.
+* Completed Epic 1 (Cluster & Prometheus running).
+
+#### **Detailed Subtasks:**
+
+1. Initialize Kubebuilder project structure (`kubebuilder init --domain autoscale.ai --repo [github.com/nishant-ingle/agentic-autoscaler](https://github.com/nishant-ingle/agentic-autoscaler)`).
+2. Define a Custom Resource Definition (CRD) named `AgenticAutoscaler` tracking target Deployment references, polling intervals, and scaling constraints (`minReplicas`, `maxReplicas`).
+3. Implement the core controller `Reconcile` loop logic using `client-go` to read deployment status and current replica counts.
+4. Configure RBAC markers (`// +kubebuilder:rbac:...`) to grant permissions for reading and patching deployment scale subresources.
+
+#### **Acceptance Criteria:**
+
+* [ ] CRD successfully applied to the local Kubernetes cluster.
+* [ ] Controller starts locally without errors, successfully watching target resource changes.
+* [ ] `Reconcile` loop outputs structured logs reflecting current target deployment states.
+
+---
+
+## Epic 3: The Reasoning Layer (Python, FastAPI & LangGraph)
+
+### **US-301: Build Asynchronous Telemetry Reasoner Service**
+
+* **ID:** `AUTOSCALE-301`
+* **Type:** Feature / AI Service
+* **Priority:** High
+* **As an** AI system engineer,
+* **I want** to build an asynchronous **FastAPI** microservice integrated with **LangChain/LangGraph**,
+* **So that** incoming cluster telemetry payloads can be processed by an LLM agent to generate reasoned scaling recommendations.
+
+#### **Pre-requisites:**
+
+* Python 3.11+, Poetry or pipenv.
+* OpenAI/Anthropic API credentials or local model runner configured.
+
+#### **Detailed Subtasks:**
+
+1. Scaffold FastAPI application with asynchronous routes (`async def`) and structured middleware.
+2. Define strict Pydantic data schemas for incoming telemetry (`ClusterMetricsPayload`) and outgoing agent decisions (`ScalingRecommendationResponse`).
+3. Implement a LangGraph state machine node that takes telemetry, checks state history, and invokes the LLM with tool definitions.
+4. Add robust exception handling for model timeouts, rate limits, and malformed JSON outputs.
+
+#### **Acceptance Criteria:**
+
+* [ ] FastAPI app boots asynchronously and exposes an `/evaluate-scaling` endpoint.
+* [ ] Pydantic validation rejects malformed telemetry payloads with HTTP 422 errors automatically.
+* [ ] Agent correctly outputs a structured JSON scaling proposal (`target_replicas`, `action`, `reasoning`).
+
+---
+
+## Epic 4: Model Context Protocol (MCP) Server Integration
+
+### **US-401: Build Custom Kubernetes & Metrics MCP Server**
+
+* **ID:** `AUTOSCALE-401`
+* **Type:** Feature / Architecture
+* **Priority:** Medium
+* **As a** systems architect,
+* **I want** to encapsulate cluster metrics collection and telemetry querying inside a dedicated **Model Context Protocol (MCP) Server**,
+* **So that** the LangChain agent interacts with infrastructure tools through a secure, standardized protocol interface rather than ad-hoc API wrappers.
+
+#### **Pre-requisites:**
+
+* Completed Epic 1 (Prometheus) and Epic 3 (FastAPI service).
+* Python MCP SDK installed (`modelcontextprotocol`).
+
+#### **Detailed Subtasks:**
+
+1. Implement a lightweight Python MCP Server exposing tools like `get_cluster_metrics`, `query_prometheus_range`, and `fetch_recent_logs`.
+2. Register the MCP server tools following standard server initialization handshakes.
+3. Configure the FastAPI LangChain agent as an MCP client to dynamically discover and execute server-exposed tools.
+4. Enforce strict read-only security boundaries within the MCP server tools to prevent unauthorized cluster write operations from the AI layer.
+
+#### **Acceptance Criteria:**
+
+* [ ] MCP server successfully initializes and lists available tool definitions (`tools/list`).
+* [ ] FastAPI agent successfully invokes MCP server tools via the protocol client layer.
+* [ ] Security boundary test confirms write operations are entirely blocked at the MCP protocol level.
+
+---
+
+## Epic 5: Operational Memory & RAG Pipeline (`pgvector`)
+
+### **US-501: Implement Operational RAG Memory Pipeline with `pgvector**`
+
+* **ID:** `AUTOSCALE-501`
+* **Type:** Feature / Data Layer
+* **Priority:** High
+* **As a** systems researcher,
+* **I want** the agentic reasoner to query a vector store of historical incident reports and SRE runbooks,
+* **So that** the agent incorporates tribal knowledge and past failure modes into its real-time scaling decisions.
+
+#### **Pre-requisites:**
+
+* PostgreSQL container running with the `pgvector` extension enabled.
+* LangChain vector store wrappers (`PGVector`).
+
+#### **Detailed Subtasks:**
+
+1. Initialize PostgreSQL database and execute `CREATE EXTENSION vector;`.
+2. Write a data seeding script to ingest synthetic SRE post-mortems, scaling runbooks, and historical traffic anomaly logs.
+3. Configure embedding generation (using lightweight local embeddings or API-based embeddings) and store chunks in `pgvector`.
+4. Integrate a retriever chain inside the FastAPI agentic service to fetch top-$k$ relevant operational runbooks based on current error logs and metric signatures.
+
+#### **Acceptance Criteria:**
+
+* [ ] PostgreSQL instance successfully persists vector embeddings.
+* [ ] Seeding script populates the vector store with structured infrastructure runbooks.
+* [ ] FastAPI agent successfully queries `pgvector` and injects retrieved operational context into its reasoning prompt.
+
+---
+
+## Epic 6: Deterministic Guardrails & Safety Barrier
+
+### **US-601: Implement Deterministic Guardrail Pipeline in Go Controller**
+
+* **ID:** `AUTOSCALE-601`
+* **Type:** Feature / Safety & Reliability
+* **Priority:** High
+* **As a** reliability engineer,
+* **I want** the Go control loop to validate all incoming LLM/FastAPI recommendations against hard-coded safety invariants,
+* **So that** hallucinatory, abrupt, or dangerous scaling commands never destabilize the production cluster.
+
+#### **Pre-requisites:**
+
+* Completed Epic 2 (Kubebuilder controller) and Epic 3 (FastAPI reasoner).
+
+#### **Detailed Subtasks:**
+
+1. Implement absolute boundary enforcement checks (`minReplicas` and `maxReplicas` hard ceilings).
+2. Build a temporal rate-limiting and hysteresis window (e.g., *"Reject any scale-down command issued within 10 minutes of a prior scale-up event"*).
+3. Implement fallback logic: If FastAPI times out (>3 seconds) or returns invalid JSON schema, default safely to standard reactive HPA behavior.
+4. Record structured audit logs for every guardrail interception, rejections, and forced overrides.
+
+#### **Acceptance Criteria:**
+
+* [ ] Controller successfully rejects replica recommendations exceeding `maxReplicas`.
+* [ ] Cooldown window prevents rapid oscillation (flapping) under fluctuating mock loads.
+* [ ] System safely defaults to fallback behavior during simulated reasoning service outages.
+
+---
+
+## Epic 7: Comparative Evaluation Harness (Locust & HPA Benchmarking)
+
+### **US-701: Build Comparative Evaluation & Locust Load-Testing Framework**
+
+* **ID:** `AUTOSCALE-701`
+* **Type:** Research / Evaluation
+* **Priority:** High
+* **As an** empirical researcher,
+* **I want** to build an automated testing script using **Locust** that subjects the cluster to identical traffic spikes under two separate control regimes (Standard K8s HPA vs. Agentic Autoscaler),
+* **So that** I can quantitatively evaluate and graph performance deltas across p99 latency, SLA violations, scaling reaction time, and pod flapping frequency.
+
+#### **Pre-requisites:**
+
+* All previous epics fully integrated and functional.
+* Locust Python package installed.
+
+#### **Detailed Subtasks:**
+
+1. Write a Locust load testing script defining dynamic user behavior profiles (step-load and sudden flash-crowd traffic spikes).
+2. Create an automated runner script to execute Locust tests against Standard HPA, record metrics for 30 minutes, and reset state.
+3. Repeat identical Locust test runs against the Agentic Autoscaler (with MCP and RAG pipeline enabled).
+4. Build evaluation scripts to parse Prometheus metrics and generate comparison graphs (Latency over Time, Replicas vs. Load, Guardrail Interception Counts).
+
+#### **Acceptance Criteria:**
+
+* [ ] Locust script successfully drives reproducible, high-concurrency traffic loads against target endpoints.
+* [ ] Evaluation harness automatically exports time-series metrics into clean comparison datasets.
+* [ ] Final report generates clean charts demonstrating the comparative resilience, response time, and stability of the Agentic Autoscaler against Standard HPA.

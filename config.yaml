@@ -1,0 +1,16 @@
+# Model Configuration Selector
+model_setting:
+  # Options: "gemini" or "ollama"
+  provider: "ollama"
+  # Options: "qwen" or "llama" (Only used if provider is "ollama")
+  local_model: "qwen"
+
+# Specific Provider Settings
+providers:
+  gemini:
+    model_name: "gemini-3.8-flash"
+  ollama:
+    models:
+      qwen: "qwen2.5-coder:1.5b"
+      llama: "llama3.2"
+
