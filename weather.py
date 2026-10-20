@@ -1,4 +1,6 @@
+import json
 import requests
+import time
 import yaml
 
 from dataclasses import dataclass
@@ -13,7 +15,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 # 1. Load system environments and project configuration
 load_dotenv()
 
-with open("config.yaml", "r") as f:
+with open("./config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 provider = config["model_setting"]["provider"]
@@ -86,21 +88,58 @@ agent = create_agent(
     checkpointer=checkpointer
 )
 
-config = {'configurable': {'thread_id': 1}}
+config = {'configurable': {'thread_id': '1'}}
 response = agent.invoke(
     {
         'messages': [
-            {'role': 'user', 'content': 'What is the weather like in Würzburg?'}
+            {'role': 'user', 'content': 'What is the weather like today?'}
+        ]
+    },
+    config=config,
+    context=Context(user_id='dlfjdlkfsjd')
+)
+
+# print(json.dumps(response, indent=4))
+print(response['structured_response'])
+print(response['structured_response'].summary)
+print(response['structured_response'].temperature_celsius)
+print("#" * 35)
+
+"""
+# Works with gemini
+# print(response['structured_response'].summary)
+# print(response['structured_response'].temperature_celsius)
+# print(response['messages'][-1])
+
+response = agent.invoke(
+    {
+        'messages': [
+            {'role': 'user', 'content': 'What is the weather like today?'}
         ]
     },
     config=config,
     context=Context(user_id='ABC123')
 )
 
-# Works with gemini
-
-# print(response)
+# print(json.dumps(response, indent=4))
 print(response['structured_response'])
-# print(response['structured_response'].summary)
-# print(response['structured_response'].temperature_celsius)
-# print(response['messages'][-1])
+print("#" * 35)
+
+
+config2 = {'configurable': {'thread_id': 2}}
+response = agent.invoke(
+    {
+        'messages': [
+            {'role': 'user', 'content': 'What is the weather like today?'}
+        ]
+    },
+    config=config,
+    context=Context(user_id='ABC123')
+)
+
+# print(json.dumps(response, indent=4))
+print(response['structured_response'])
+print("#" * 35)
+
+# Works with gemini
+"""
