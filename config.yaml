@@ -1,9 +1,9 @@
 # Model Configuration Selector
 model_setting:
-  # Options: "gemini" or "ollama"
-  provider: "gemini"
+  # Options: "gemini" or "ollama" or "groq"
+  provider: "ollama"
   # Options: "qwen" or "llama" (Only used if provider is "ollama")
-  local_model: "llama"
+  local_model: "qwen2_5_7b"
 
 # Specific Provider Settings
 providers:
@@ -11,6 +11,9 @@ providers:
     model_name: "gemini-3.8-flash"
   ollama:
     models:
-      qwen: "qwen2.5-coder:1.5b"
-      llama: "llama3.2"
-
+      qwen2_5_7b: "qwen2.5:latest"
+      llama: "llama3.1:8b"
+      qwen2_5_14b: "qwen2.5:14b"
+      mistral_nemo: "mistral-nemo:latest"
+  groq:
+    model_name: "openai/gpt-oss-20b"

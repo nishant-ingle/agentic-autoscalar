@@ -36,7 +36,12 @@ elif provider_key == "ollama":
     
     model_provider = "ollama"
     print(f"🤖 Initialized Local Provider: Ollama -> {selected_local.upper()} ({model_name})")
-
+elif provider_key == "groq":
+    from langchain_groq import ChatGroq
+    model_name = config["providers"]["groq"]["model_name"]
+    llm = ChatGroq(model=model_name)
+    model_provider = "groq"
+    print(f"⚡ Initialized Groq Provider ({model_name})")
 else:
     raise ValueError(f"Unknown provider '{provider_key}' set in config.yaml")
 
@@ -56,8 +61,17 @@ class ResponseFormat:
 
 @tool('get_weather', description='Return weather information for a given city', return_direct=False)
 def get_weather(city: str):
-    response = requests.get(f'https://wttr.in/{city}?format=j1')
-    return response.json()
+    response = requests.get(f'https://wttr.in/{city}?format=j1').json()
+    
+    # Extract only key metrics to prevent context bloat
+    current = response['current_condition'][0]
+    return {
+        "city": city,
+        "temperature_celsius": current['temp_C'],
+        "temperature_fahrenheit": current['temp_F'],
+        "humidity": current['humidity'],
+        "description": current['weatherDesc'][0]['value']
+    }
 
 @tool('locate_user', description="Look up a user's city based on the context")
 def locate_user(runtime: ToolRuntime[Context]):
@@ -82,7 +96,12 @@ llm = init_chat_model(
 agent = create_agent(
     model=llm,
     tools=[get_weather, locate_user],
-    system_prompt='You are a helpful weather assistant, who always cracks jokes and is humorous while remaining helpful.',
+    system_prompt = ("""
+        You are a helpful weather assistant.
+        1. You MUST call `locate_user` first if the user does not specify a city.
+        2. If `locate_user` returns 'Unknown', you MUST ask the user which city they are in. DO NOT guess a location.
+        3. Once you have a valid city name, you MUST call the `get_weather` tool. NEVER invent or guess weather statistics yourself.
+    """),
     context_schema=Context,
     response_format=ResponseFormat,
     checkpointer=checkpointer
@@ -96,16 +115,28 @@ response = agent.invoke(
         ]
     },
     config=config,
-    context=Context(user_id='dlfjdlkfsjd')
+    context=Context(user_id='HJKL111')
 )
 
+# Print the structured Pydantic response nicely
+# if response.get('structured_response'):
+#     print("Structured Response:")
+#     print(response['structured_response'])
+# else:
+#     # Fallback to the last message content
+#     print("Agent Message:", response['messages'][-1].content)
+
+# Print each message in the conversation thread cleanly
+for message in response['messages']:
+    message.pretty_print()
+
+# print(response)
 # print(json.dumps(response, indent=4))
-print(response['structured_response'])
-print(response['structured_response'].summary)
-print(response['structured_response'].temperature_celsius)
+# print(response['structured_response'])
+# print(response['structured_response'].summary)
+# print(response['structured_response'].temperature_celsius)
 print("#" * 35)
 
-"""
 # Works with gemini
 # print(response['structured_response'].summary)
 # print(response['structured_response'].temperature_celsius)
@@ -121,25 +152,50 @@ response = agent.invoke(
     context=Context(user_id='ABC123')
 )
 
+for message in response['messages']:
+    message.pretty_print()
+# print(response)
 # print(json.dumps(response, indent=4))
-print(response['structured_response'])
+# print(response['structured_response'])
 print("#" * 35)
 
 
-config2 = {'configurable': {'thread_id': 2}}
+config2 = {'configurable': {'thread_id': '2'}}
 response = agent.invoke(
     {
         'messages': [
             {'role': 'user', 'content': 'What is the weather like today?'}
         ]
     },
-    config=config,
-    context=Context(user_id='ABC123')
+    config=config2,
+    context=Context(user_id='ABC124')
 )
 
+# for message in response['messages']:
+#     message.pretty_print()
+# print(response)
 # print(json.dumps(response, indent=4))
-print(response['structured_response'])
+# Works with gemini
+# print(response['structured_response'])
 print("#" * 35)
 
+
+
+config3 = {'configurable': {'thread_id': '3'}}
+response = agent.invoke(
+    {
+        'messages': [
+            {'role': 'user', 'content': 'How is the weather today?'}
+        ]
+    },
+    config=config3,
+    context=Context(user_id='XYZ456')
+)
+
+for message in response['messages']:
+    message.pretty_print()
+# print(response)
+# print(json.dumps(response, indent=4))
 # Works with gemini
-"""
+# print(response['structured_response'])
+print("#" * 35)
