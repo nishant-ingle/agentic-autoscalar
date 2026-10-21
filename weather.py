@@ -3,6 +3,7 @@ import os
 import requests
 import yaml
 
+from datetime import datetime, timezone
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -151,36 +152,54 @@ agent = create_agent(
     checkpointer=checkpointer
 )
 
-# Test Runs
+total_requests = 0
 total_input_tokens = 0
 total_output_tokens = 0
 
 test_cases = [
-    # ('1', 'HJKL111', 'What is the weather like today?'),
-    # ('1', 'ABC123', 'What is the weather like today?'),
-    ('2', 'ABC124', 'What is the weather like today?'),
-    ('2', 'ABC123', 'What is the weather like today?'),
-    # ('3', 'XYZ456', 'How is the weather today?')
+    ('4', 'HJKL111', 'what and how is the weather like today?'),
+    ('4', 'ABC123', 'what and how is the weather like today?'),
+    ('5', 'ABC124', 'what and how is the weather like today?'),
+    ('5', 'ABC123', 'what and how is the weather like today?'),
+    ('6', 'XYZ456', 'How is the weather today?')
 ]
+LOG_FILE = "usage_log.jsonl"
 
 for thread_id, user_id, prompt in test_cases:
     config_thread = {'configurable': {'thread_id': thread_id}}
+    
+    # Track per-request tokens
+    req_input_tokens = 0
+    req_output_tokens = 0
+    
     response = agent.invoke(
         {'messages': [{'role': 'user', 'content': prompt}]},
         config=config_thread,
         context=Context(user_id=user_id)
     )
     
+    total_requests += 1
+    
     for message in response['messages']:
         message.pretty_print()
         if hasattr(message, 'usage_metadata') and message.usage_metadata:
-            total_input_tokens += message.usage_metadata.get('input_tokens', 0)
-            total_output_tokens += message.usage_metadata.get('output_tokens', 0)
+            req_input_tokens += message.usage_metadata.get('input_tokens', 0)
+            req_output_tokens += message.usage_metadata.get('output_tokens', 0)
             
+    total_input_tokens += req_input_tokens
+    total_output_tokens += req_output_tokens
+
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "requests": 1,
+        "input_tokens": req_input_tokens,
+        "output_tokens": req_output_tokens,
+        "total_tokens": req_input_tokens + req_output_tokens
+    }
+    
+    with open(LOG_FILE, "a") as f:
+        f.write(json.dumps(log_entry) + "\n")
+
     print("#" * 35)
 
-total_tokens = total_input_tokens + total_output_tokens
-print(f"📊 Token Usage Breakdown:")
-print(f"   Input Tokens:  {total_input_tokens}")
-print(f"   Output Tokens: {total_output_tokens}")
-print(f"   Total Tokens:  {total_tokens}")
+print(f"📊 Run Breakdown: {total_requests} requests | {total_input_tokens + total_output_tokens} total tokens")
