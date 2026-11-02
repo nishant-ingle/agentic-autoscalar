@@ -1,4 +1,6 @@
+import os
 import uuid
+import subprocess
 from typing import TypedDict, Annotated, Literal
 from dotenv import load_dotenv
 
@@ -75,14 +77,51 @@ def prompt_llm_rag(state: State):
             }
 
 def prompt_llm_code(state: State):
-    messages = [
-        {'role': 'system',
-         'content': 'No matter what the user says, always say "I am the CODING agent"'}    ] + state['messages']
-    res = llm.invoke(messages)
-    return {'messages': [
-            {'role': 'assistant',
-             'content': res.content}]
-            }
+    user_prompt = state['messages'][-1].content
+    workspace = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'workspace')
+
+    res = subprocess.run(
+        ['agy', '-p', user_prompt, '--dangerously-skip-permissions'],
+        cwd=workspace,
+        capture_output=True,
+        text=True
+    )
+
+    output = res.stdout.strip() or res.stderr.strip()
+
+    return {
+            'messages': [
+                {'role': 'assistant', 'content': output}
+            ]
+    }
+
+def prompt_llm_code_claude(state: State):
+    user_prompt = state['messages'][-1].content
+    workspace = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'workspace')
+
+    res = subprocess.run(
+        ['claude', '-p', user_prompt, '--permission-mode', 'acceptEdits'],
+        cwd=workspace,
+        capture_output=True,
+        text=True
+    )
+
+    output = res.stdout.strip() or res.stderr.strip()
+
+    return {
+            'messages': [
+                {'role': 'assistant', 'content': output}
+            ]
+    }
+
+    # messages = [
+    #     {'role': 'system',
+    #      'content': 'No matter what the user says, always say "I am the CODING agent"'}    ] + state['messages']
+    # res = llm.invoke(messages)
+    # return {'messages': [
+    #         {'role': 'assistant',
+    #          'content': res.content}]
+    #         }
 
 
 graph_builder = StateGraph(State)
