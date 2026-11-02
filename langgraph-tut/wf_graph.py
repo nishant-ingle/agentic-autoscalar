@@ -140,21 +140,31 @@ def accept_coding(state: State):
     return {'messages': [{'role': 'user', 'content': text}], 'next_node': 'accept_coding'}
 
 
+def prepare_coding_request(state: State):
+    messages = [
+        {'role': 'system', 'content': 'Rewrite the latest user coding request into a clear instruction for Antigravity CLI. Use the conversation history as context. Only output the instruction, no explanation.'},
+    ] + state['messages']
+    res = llm.invoke(messages)
+    return {'messages': [{'role': 'user', 'content': res.content}]}
+
+
 graph_builder = StateGraph(State)
 graph_builder.add_node('classifier', classify_intent)
 graph_builder.add_node('chat_agent', prompt_llm_chat)
 graph_builder.add_node('rag_agent', prompt_llm_rag)
 graph_builder.add_node('coding_agent', prompt_llm_code)
 graph_builder.add_node('accept_coding', accept_coding)
+graph_builder.add_node('prepare_coding_request', prepare_coding_request)
 
 graph_builder.add_edge(START, 'classifier')
 graph_builder.add_conditional_edges('classifier',
                                     lambda state: state['msg_intent'],
                                     {'chat': 'chat_agent',
                                      'knowledge': 'rag_agent',
-                                     'code': 'accept_coding'})
+                                     'code': 'prepare_coding_request'})
+graph_builder.add_edge('prepare_coding_request', 'accept_coding')
 graph_builder.add_conditional_edges('accept_coding', lambda state: 'end' if state.get('next_node') == 'denied' else state['next_node'],
-                                    {'end': END, 'coding_agent': 'coding_agent', 'accept_coding': 'accept_coding'})
+                                    {'end': END, 'coding_agent': 'coding_agent', 'accept_coding': 'prepare_coding_request'})
 
 graph_builder.add_edge('chat_agent', END)
 graph_builder.add_edge('rag_agent', END)
