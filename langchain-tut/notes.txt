@@ -7,3 +7,4 @@ Link: https://www.youtube.com/watch?v=J7j5tCB_y4w
     ModelCallLimitMiddleware
     ShellToolMiddleware
     FilesystemFileSearchMiddleware
+    PIIMiddleware
