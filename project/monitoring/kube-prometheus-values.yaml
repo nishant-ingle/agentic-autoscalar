@@ -1,0 +1,86 @@
+# Optimized values for single-node Docker Desktop / local clusters
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeScheduler: false
+    kubeControllerManager: false
+    kubeProxy: false
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+grafana:
+  enabled: true
+  adminPassword: "prom-operator"
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "custom-dashboards"
+          orgId: 1
+          folder: "Agentic Autoscaler"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/custom-dashboards
+  dashboards:
+    custom-dashboards:
+      target-workload:
+        # Loaded via configmap or file
+        file: /var/lib/grafana/dashboards/custom-dashboards/target-workload-dashboard.json
+
+# Disable component scrapers that do not expose public metrics endpoints on Docker-Desktop
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+# Node exporter and kube-state-metrics provide pod and node level telemetry
+nodeExporter:
+  enabled: true
+kubeStateMetrics:
+  enabled: true
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    replicas: 1
+    # Discover ServiceMonitors from all namespaces without strict label filtering
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorNamespaceSelector: {}
+    scrapeInterval: "15s"
+    evaluationInterval: "15s"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

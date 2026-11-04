@@ -1,0 +1,76 @@
+Epic 1 Implementation: Target Microservice & Prometheus Telemetry 
+  Epic 1 (AUTOSCALE-101) has been implemented end-to-end using Go / Gin with all required Kubernetes manifests, Prometheus
+  Operator instrumentation, Grafana dashboard configuration, and automation scripts tailored for a single-node Docker Desktop
+  Kubernetes cluster.
+  ──────
+  ## 1. Deliverables Summary
+   Component                │ Path                              │ Description
+  ──────────────────────────┼───────────────────────────────────┼─────────────────────────────────────────────────────────────
+   Go/Gin Microservice      │ main.go                           │ Production-grade HTTP server with graceful shutdown on
+                            │                                   │ SIGTERM.
+   Prometheus Middleware    │ prometheus.go                     │ Gin middleware capturing golden signals
+                            │                                   │ (workload_http_requests_total,
+                            │                                   │ workload_http_request_duration_seconds,
+                            │                                   │ in_flight_requests).
+   Stress Handlers          │ target-service/internal/handlers/ │ /api/load/cpu (artificial CPU burner with concurrency),
+                            │                                   │ /api/load/memory/* (heap stress), /api/workload (simulated
+                            │                                   │ traffic), /healthz & /readyz.
+   Dockerfile               │ Dockerfile                        │ Multi-stage build producing a non-root, lightweight static
+                            │                                   │ Alpine binary.
+   K8s Manifests            │ k8s/                              │ namespace.yaml, deployment.yaml (2 replicas, CPU/Memory
+                            │                                   │ requests & limits), service.yaml, and servicemonitor.yaml
+                            │                                   │ (15s scrape interval).
+   Monitoring Configuration │ kube-prometheus-values.yaml       │ Docker-Desktop-optimized Helm values disabling host control
+                            │                                   │ plane scrapers and enabling cross-namespace ServiceMonitor
+                            │                                   │ discovery.
+   Grafana Dashboard        │ target-workload-dashboard.json    │ Auto-provisioned Grafana dashboard tracking CPU, memory,
+                            │                                   │ RPS, p50/p95/p99 latency, and replica counts.
+   Lifecycle & Tests        │ Makefile & scripts/               │ Scripts for 1-click deployment, traffic generation,
+                            │                                   │ acceptance verification, and port forwarding.
+  ──────
+  ## 2. Quick Execution Guide (Single-Node Docker Desktop)
+  ### Step 1: Deploy All Resources
+    make deploy
+
+  Builds the local image and installs kube-prometheus-stack and the workload onto Docker Desktop.
+  ### Step 2: Open Observability Tunnels
+  In a separate terminal:
+    make port-forward
+  • Target Workload API: http://localhost:8080
+  • Prometheus UI: http://localhost:9090
+  • Grafana UI: http://localhost:3000 (User: admin, Password: prom-operator)
+
+Resume with -c (or command below):
+agy --conversation=0448ccaf-bc86-4db9-b93e-0431b1581e9b
+
+
+  ### Step 3: Run Traffic & Verify Acceptance Criteria
+
+    make test-traffic  # Generates 30s of synthetic traffic and CPU spikes
+    make verify        # Verifies replica health and metric ingestion via Prometheus API
+  ──────
+  ## 3. Acceptance Criteria Checklist
+
+  [✓] Target application successfully runs on the cluster with healthy replica status: 2 ready replicas configured with
+  liveness/readiness probes in deployment.yaml.
+  [✓] Prometheus targets view confirms scrapers are active and polling metrics successfully: servicemonitor.yaml targets port
+  http-metrics at 15s intervals; verified via verify-metrics.sh.
+  [✓] Grafana dashboard connected to Prometheus displays real-time CPU utilization and request throughput charts: Auto-
+  provisioned dashboard (target-workload-dashboard.json) displays active replicas, RPS, p50/p95/p99 latency, container CPU
+  cores vs requests, and memory working set.
+  ──────
+  ## 4. Necessary & Feasible Assumptions
+
+  1. Docker Desktop Local Registry Bypass: Single-node Docker Desktop shares its daemon image cache with Kubernetes. Building
+  the image locally with target-service:latest and setting imagePullPolicy: IfNotPresent removes the need to configure or push
+  to an external container registry.
+  2. Disabled Local Host Scrapers: In kube-prometheus-values.yaml, scrape targets for control plane components that bind
+  directly to 127.0.0.1 on macOS Docker Desktop (kubeControllerManager, kubeScheduler, kubeProxy, kubeEtcd) are disabled to
+  prevent spurious alert firing.
+  3. Cross-Namespace ServiceMonitor Discovery: Configured serviceMonitorSelectorNilUsesHelmValues: false so Prometheus
+  dynamically scrapes any namespace bearing a valid ServiceMonitor.
+  4. Baseline Resource Quotas: Container requests are set to cpu: 100m, memory: 128Mi and limits to cpu: 500m, memory: 512Mi
+  to allow rapid, observable CPU spikes during autoscaling tests without depleting host laptop resources.
+  5. Scrape Interval: Set to 15s (matching US-101 subtask 4) to support rapid feedback loops for downstream autoscaling
+  controllers (Epic 2) and LLM reasoning cycles (Epic 3).
+
