@@ -12,7 +12,7 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 ## Epic 1: Infrastructure Baseline & Target Telemetry Setup
 
-### **US-101: Target Microservice Deployment & Prometheus Instrumentation**
+### **EPIC-101: Target Microservice Deployment & Prometheus Instrumentation**
 
 * **ID:** `AUTOSCALE-101`
 * **Type:** Task / Infrastructure
@@ -30,20 +30,20 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 1. Write a containerized target service (e.g., a Go or Spring Boot HTTP API configured with artificial CPU load endpoints).
 2. Create Kubernetes Deployment and ClusterIP manifests specifying resource requests and limits (`resources.requests.cpu`).
-3. Deploy Prometheus Operator / kube-prometheus-stack via Helm.
+3. Deploy Prometheus Operator / kube-prometheEPIC-stack via Helm.
 4. Verify that Prometheus scrapers successfully ingest custom pod-level and node-level metrics every 15 seconds.
 
 #### **Acceptance Criteria:**
 
-* [ ] Target application successfully runs on the K3D cluster with healthy replica status.
-* [ ] Prometheus targets view confirms scrapers are active and polling metrics successfully.
-* [ ] Grafana dashboard connected to Prometheus displays real-time CPU utilization and request throughput charts.
+* [*] Target application successfully runs on the K3D cluster with healthy replica status.
+* [*] Prometheus targets view confirms scrapers are active and polling metrics successfully.
+* [*] Grafana dashboard connected to Prometheus displays real-time CPU utilization and request throughput charts.
 
 ---
 
 ## Epic 2: Control Plane Foundation (Go / Kubebuilder)
 
-### **US-201: Scaffold Custom Operator via Kubebuilder (`client-go`)**
+### **EPIC-201: Scaffold Custom Operator via Kubebuilder (`client-go`)**
 
 * **ID:** `AUTOSCALE-201`
 * **Type:** Feature / Control Plane
@@ -59,7 +59,7 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 #### **Detailed Subtasks:**
 
-1. Initialize Kubebuilder project structure (`kubebuilder init --domain autoscale.ai --repo [github.com/nishant-ingle/agentic-autoscaler](https://github.com/nishant-ingle/agentic-autoscaler)`).
+1. Initialize Kubebuilder project structure (`kubebuilder init --domain autoscale.ai --repo [github.com/nishant-ingle/agentic-autoscaler](https://github.com/nishant-ingle/agentic-autoscalar)`).
 2. Define a Custom Resource Definition (CRD) named `AgenticAutoscaler` tracking target Deployment references, polling intervals, and scaling constraints (`minReplicas`, `maxReplicas`).
 3. Implement the core controller `Reconcile` loop logic using `client-go` to read deployment status and current replica counts.
 4. Configure RBAC markers (`// +kubebuilder:rbac:...`) to grant permissions for reading and patching deployment scale subresources.
@@ -74,7 +74,7 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 ## Epic 3: The Reasoning Layer (Python, FastAPI & LangGraph)
 
-### **US-301: Build Asynchronous Telemetry Reasoner Service**
+### **EPIC-301: Build Asynchronous Telemetry Reasoner Service**
 
 * **ID:** `AUTOSCALE-301`
 * **Type:** Feature / AI Service
@@ -105,7 +105,7 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 ## Epic 4: Model Context Protocol (MCP) Server Integration
 
-### **US-401: Build Custom Kubernetes & Metrics MCP Server**
+### **EPIC-401: Build Custom Kubernetes & Metrics MCP Server**
 
 * **ID:** `AUTOSCALE-401`
 * **Type:** Feature / Architecture
@@ -136,7 +136,7 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 ## Epic 5: Operational Memory & RAG Pipeline (`pgvector`)
 
-### **US-501: Implement Operational RAG Memory Pipeline with `pgvector**`
+### **EPIC-501: Implement Operational RAG Memory Pipeline with `pgvector**`
 
 * **ID:** `AUTOSCALE-501`
 * **Type:** Feature / Data Layer
@@ -167,7 +167,7 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 ## Epic 6: Deterministic Guardrails & Safety Barrier
 
-### **US-601: Implement Deterministic Guardrail Pipeline in Go Controller**
+### **EPIC-601: Implement Deterministic Guardrail Pipeline in Go Controller**
 
 * **ID:** `AUTOSCALE-601`
 * **Type:** Feature / Safety & Reliability
@@ -197,7 +197,7 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 ## Epic 7: Comparative Evaluation Harness (Locust & HPA Benchmarking)
 
-### **US-701: Build Comparative Evaluation & Locust Load-Testing Framework**
+### **EPIC-701: Build Comparative Evaluation & Locust Load-Testing Framework**
 
 * **ID:** `AUTOSCALE-701`
 * **Type:** Research / Evaluation

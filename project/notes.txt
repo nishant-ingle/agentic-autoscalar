@@ -1,34 +1,49 @@
 1.App Telemetry (Successful)
 
-The curl against :8080/metrics returned exactly what it should.
-Your Go/Gin app is actively counting the requests (25 on /api/load/cpu and 138 on /api/workload)
-and successfully formatting them for Prometheus.
+	The curl against :8080/metrics returned exactly what it should.
+	Your Go/Gin app is actively counting the requests (25 on /api/load/cpu and 138 on /api/workload)
+	and successfully formatting them for Prometheus.
 
-curl -s http://localhost:8080/metrics | grep workload_http_requests_total
+	curl -s http://localhost:8080/metrics | grep workload_http_requests_total
 
 2. PromQL Query (Label & Time Window Correction)
 
-To verify the data is in Prometheus without worrying about the 1-minute window,
-query the raw counter instead:
+	To verify the data is in Prometheus without worrying about the 1-minute window,
+	query the raw counter instead:
 
-curl -s -g 'http://localhost:9090/api/v1/query?query=workload_http_requests_total{namespace="workload-system"}'
+	curl -s -g 'http://localhost:9090/api/v1/query?query=workload_http_requests_total{namespace="workload-system"}'
 
-Verification: This will return the exact 25 and 138 counts you saw in Step 1,
-proving Prometheus successfully ingested them.
+	Verification: This will return the exact 25 and 138 counts you saw in Step 1,
+	proving Prometheus successfully ingested them.
 
 3. Prometheus Targets
 
-Prometheus returns its active targets as one massive, single-line JSON payload.
-When you used grep, it matched target-workload but printed the entire block containing
-every system component (like kubernetes-api-servers).
+	Prometheus returns its active targets as one massive, single-line JSON payload.
+	When you used grep, it matched target-workload but printed the entire block containing
+	every system component (like kubernetes-api-servers).
 
-curl -s -g 'http://localhost:9090/api/v1/targets?match_target={app="target-workload"}'
-curl -s 'http://localhost:9090/api/v1/targets' | grep -i target-workload
+	curl -s -g 'http://localhost:9090/api/v1/targets?match_target={app="target-workload"}'
+	curl -s 'http://localhost:9090/api/v1/targets' | grep -i target-workload
 
 4. Grafana Datasource
 
-curl -s -u admin:prom-operator http://localhost:3000/api/datasources
+	curl -s -u admin:prom-operator http://localhost:3000/api/datasources
 
-Short version
+	Short version
 
-curl -s -g 'http://localhost:9090/api/v1/targets?match_target={app="target-workload"}' | jq '.data.activeTargets[] | {instance: .labels.instance, health: .health}'
+	curl -s -g 'http://localhost:9090/api/v1/targets?match_target={app="target-workload"}' | jq '.data.activeTargets[] | {instance: .labels.instance, health: .health}'
+
+5. Steps
+
+	a. Running locally
+
+		server> go run cmd/server/main.go
+		http://localhost:8080/swagger/index.html
+
+	b. CounterVecs
+		HTTPRequestDuration, SyntheticCPUBurnTime are declared in Prometheus
+		SyntheticCPUBurnTime tracks CPU API count in cpu.go
+		HTTPRequestDuration tracks all HTTP requests
+
+	c. Pod logs
+		kubectl logs -l app=target-workload -n workload-system --tail=50
