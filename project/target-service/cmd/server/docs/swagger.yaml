@@ -1,0 +1,239 @@
+definitions:
+  handlers.CPULoadResponse:
+    properties:
+      burned_time_ms:
+        type: integer
+      concurrency:
+        type: integer
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  handlers.HealthResponse:
+    properties:
+      hostname:
+        type: string
+      status:
+        type: string
+      version:
+        type: string
+    type: object
+  handlers.MemoryLoadResponse:
+    properties:
+      allocated_mb:
+        type: integer
+      heap_alloc_bytes:
+        type: integer
+      message:
+        type: string
+      status:
+        type: string
+      total_retained_mb:
+        type: integer
+    type: object
+  handlers.WorkloadResponse:
+    properties:
+      computation_rounds:
+        type: integer
+      hostname:
+        type: string
+      result_checksum:
+        type: string
+      sleep_delay_ms:
+        type: integer
+      timestamp:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: API for generating synthetic CPU and memory load to test Kubernetes
+    autoscaling.
+  title: Agentic Autoscaler Target Workload API
+  version: "1.0"
+paths:
+  /api/load/cpu:
+    get:
+      description: Spikes CPU across N goroutines for a specified duration to test
+        autoscaling.
+      parameters:
+      - default: 500
+        description: Duration of burn in milliseconds (max 30000)
+        in: query
+        name: duration_ms
+        type: integer
+      - default: 1
+        description: Number of worker goroutines (max 16)
+        in: query
+        name: concurrency
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.CPULoadResponse'
+      summary: Generate CPU Load
+      tags:
+      - load
+    post:
+      description: Spikes CPU across N goroutines for a specified duration to test
+        autoscaling.
+      parameters:
+      - default: 500
+        description: Duration of burn in milliseconds (max 30000)
+        in: query
+        name: duration_ms
+        type: integer
+      - default: 1
+        description: Number of worker goroutines (max 16)
+        in: query
+        name: concurrency
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.CPULoadResponse'
+      summary: Generate CPU Load
+      tags:
+      - load
+  /api/load/memory/allocate:
+    post:
+      description: Artificially inflates the pod's memory working set for autoscaling
+        tests.
+      parameters:
+      - default: 50
+        description: Megabytes to allocate (max 1024)
+        in: query
+        name: mb
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MemoryLoadResponse'
+      summary: Allocate Memory
+      tags:
+      - load
+  /api/load/memory/release:
+    post:
+      description: Clears synthetic memory buffers and forces garbage collection.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MemoryLoadResponse'
+      summary: Release Memory
+      tags:
+      - load
+  /api/workload:
+    get:
+      description: Simulates a standard API call with adjustable I/O sleep delay and
+        CPU hashing.
+      parameters:
+      - default: 20000
+        description: Number of SHA256 hashing rounds (max 500000)
+        in: query
+        name: rounds
+        type: integer
+      - default: 10
+        description: Simulated I/O sleep delay in ms (max 5000)
+        in: query
+        name: delay_ms
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.WorkloadResponse'
+      summary: Simulate Mixed Workload
+      tags:
+      - load
+    post:
+      description: Simulates a standard API call with adjustable I/O sleep delay and
+        CPU hashing.
+      parameters:
+      - default: 20000
+        description: Number of SHA256 hashing rounds (max 500000)
+        in: query
+        name: rounds
+        type: integer
+      - default: 10
+        description: Simulated I/O sleep delay in ms (max 5000)
+        in: query
+        name: delay_ms
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.WorkloadResponse'
+      summary: Simulate Mixed Workload
+      tags:
+      - load
+  /healthz:
+    get:
+      description: Returns 200 OK if the server is running.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: Liveness Probe
+      tags:
+      - health
+  /livez:
+    get:
+      description: Returns 200 OK if the server is running.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: Liveness Probe
+      tags:
+      - health
+  /metrics:
+    get:
+      description: Exposes the application's telemetry data in Prometheus Exposition
+        text format.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Prometheus metrics payload
+          schema:
+            type: string
+      summary: Get Prometheus Metrics
+      tags:
+      - telemetry
+  /readyz:
+    get:
+      description: Returns 200 OK if the server is ready to accept traffic.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: Readiness Probe
+      tags:
+      - health
+swagger: "2.0"

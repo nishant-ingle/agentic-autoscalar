@@ -1,5 +1,9 @@
 package main
 
+// @title Agentic Autoscaler Target Workload API
+// @version 1.0
+// @description API for generating synthetic CPU and memory load to test Kubernetes autoscaling.
+
 import (
 	"context"
 	"fmt"
@@ -11,9 +15,35 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nishant-ingle/agentic-autoscaler/target-service/internal/handlers"
-	"github.com/nishant-ingle/agentic-autoscaler/target-service/internal/metrics"
+	
+	"github.com/nishant-ingle/agentic-autoscalar/project/target-service/internal/handlers"
+	"github.com/nishant-ingle/agentic-autoscalar/project/target-service/internal/metrics"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	
+	// The docs import must explicitly point to cmd/server/docs
+	_ "github.com/nishant-ingle/agentic-autoscalar/project/target-service/cmd/server/docs"
 )
+
+func RequestLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		rawQuery := c.Request.URL.RawQuery
+
+		c.Next() // Process the request (waits for handler to finish)
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+
+		if rawQuery != "" {
+			log.Printf("[HTTP] | %3d | %13v | path=%s query=%s", status, latency, path, rawQuery)
+		} else {
+			log.Printf("[HTTP] | %3d | %13v | path=%s", status, latency, path)
+		}
+	}
+}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -28,6 +58,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(RequestLogger())
 	router.Use(metrics.GinMetricsMiddleware())
 
 	// Standard health and observability routes
@@ -51,6 +82,8 @@ func main() {
 		api.GET("/workload", handlers.WorkloadMixed)
 		api.POST("/workload", handlers.WorkloadMixed)
 	}
+
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%s", port),

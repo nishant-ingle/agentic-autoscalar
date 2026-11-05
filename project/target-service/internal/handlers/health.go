@@ -14,6 +14,13 @@ type HealthResponse struct {
 }
 
 // Healthz responds to liveness probes.
+// @Summary Liveness Probe
+// @Description Returns 200 OK if the server is running.
+// @Tags health
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Router /healthz [get]
+// @Router /livez [get]
 func Healthz(c *gin.Context) {
 	hostname, _ := os.Hostname()
 	c.JSON(http.StatusOK, HealthResponse{
@@ -24,6 +31,12 @@ func Healthz(c *gin.Context) {
 }
 
 // Readyz responds to readiness probes.
+// @Summary Readiness Probe
+// @Description Returns 200 OK if the server is ready to accept traffic.
+// @Tags health
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Router /readyz [get]
 func Readyz(c *gin.Context) {
 	hostname, _ := os.Hostname()
 	c.JSON(http.StatusOK, HealthResponse{

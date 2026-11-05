@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nishant-ingle/agentic-autoscaler/target-service/internal/metrics"
+	"github.com/nishant-ingle/agentic-autoscalar/project/target-service/internal/metrics"
 )
 
 type CPULoadRequest struct {
@@ -25,6 +25,15 @@ type CPULoadResponse struct {
 }
 
 // CPULoad burns CPU cycles across N goroutines for a specified duration in milliseconds.
+// @Summary Generate CPU Load
+// @Description Spikes CPU across N goroutines for a specified duration to test autoscaling.
+// @Tags load
+// @Produce json
+// @Param duration_ms query int false "Duration of burn in milliseconds (max 30000)" default(500)
+// @Param concurrency query int false "Number of worker goroutines (max 16)" default(1)
+// @Success 200 {object} CPULoadResponse
+// @Router /api/load/cpu [get]
+// @Router /api/load/cpu [post]
 func CPULoad(c *gin.Context) {
 	durationMs := 500
 	concurrency := 1

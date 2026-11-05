@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nishant-ingle/agentic-autoscaler/target-service/internal/handlers"
-	"github.com/nishant-ingle/agentic-autoscaler/target-service/internal/metrics"
+	"github.com/nishant-ingle/agentic-autoscalar/project/target-service/internal/handlers"
+	"github.com/nishant-ingle/agentic-autoscalar/project/target-service/internal/metrics"
 )
 
 func setupTestRouter() *gin.Engine {

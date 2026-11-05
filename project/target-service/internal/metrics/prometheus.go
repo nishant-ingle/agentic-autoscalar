@@ -104,6 +104,12 @@ func GinMetricsMiddleware() gin.HandlerFunc {
 }
 
 // PrometheusHandler exposes the Prometheus standard registry handler.
+// @Summary Get Prometheus Metrics
+// @Description Exposes the application's telemetry data in Prometheus Exposition text format.
+// @Tags telemetry
+// @Produce plain
+// @Success 200 {string} string "Prometheus metrics payload"
+// @Router /metrics [get]
 func PrometheusHandler() gin.HandlerFunc {
 	h := promhttp.Handler()
 	return func(c *gin.Context) {

@@ -21,6 +21,15 @@ type WorkloadResponse struct {
 }
 
 // WorkloadMixed simulates a standard microservice processing payload (CPU + I/O).
+// @Summary Simulate Mixed Workload
+// @Description Simulates a standard API call with adjustable I/O sleep delay and CPU hashing.
+// @Tags load
+// @Produce json
+// @Param rounds query int false "Number of SHA256 hashing rounds (max 500000)" default(20000)
+// @Param delay_ms query int false "Simulated I/O sleep delay in ms (max 5000)" default(10)
+// @Success 200 {object} WorkloadResponse
+// @Router /api/workload [get]
+// @Router /api/workload [post]
 func WorkloadMixed(c *gin.Context) {
 	rounds := 20000
 	if val := c.Query("rounds"); val != "" {

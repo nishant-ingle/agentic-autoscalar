@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nishant-ingle/agentic-autoscaler/target-service/internal/metrics"
+	"github.com/nishant-ingle/agentic-autoscalar/project/target-service/internal/metrics"
 )
 
 var (
@@ -25,6 +25,13 @@ type MemoryLoadResponse struct {
 }
 
 // MemoryAllocate allocates chunks of memory to simulate memory footprint growth.
+// @Summary Allocate Memory
+// @Description Artificially inflates the pod's memory working set for autoscaling tests.
+// @Tags load
+// @Produce json
+// @Param mb query int false "Megabytes to allocate (max 1024)" default(50)
+// @Success 200 {object} MemoryLoadResponse
+// @Router /api/load/memory/allocate [post]
 func MemoryAllocate(c *gin.Context) {
 	mb := 50
 	if val := c.Query("mb"); val != "" {
@@ -65,6 +72,12 @@ func MemoryAllocate(c *gin.Context) {
 }
 
 // MemoryRelease frees all synthetically allocated memory buffers and triggers GC.
+// @Summary Release Memory
+// @Description Clears synthetic memory buffers and forces garbage collection.
+// @Tags load
+// @Produce json
+// @Success 200 {object} MemoryLoadResponse
+// @Router /api/load/memory/release [post]
 func MemoryRelease(c *gin.Context) {
 	memStoreMutex.Lock()
 	memStore = nil
