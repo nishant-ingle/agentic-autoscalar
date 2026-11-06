@@ -4,128 +4,103 @@ metadata:
   name: target-workload-dashboard
   namespace: monitoring
   labels:
-    grafana_dashboard: "1"
+    grafana_dashboard: '1'
 data:
-  target-workload.json: |-
-    {
-      "annotations": { "list": [] },
-      "editable": true,
-      "graphTooltip": 1,
-      "panels": [
-        {
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-          "id": 100,
-          "title": "Target Workload Golden Signals & Autoscaling Telemetry",
-          "type": "row"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": { "defaults": { "unit": "short" } },
-          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 1 },
-          "id": 1,
-          "title": "Active Deployment Replicas",
-          "type": "timeseries",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "kube_deployment_status_replicas_available{namespace=\"workload-system\", deployment=\"target-workload\"} or vector(0)",
-              "legendFormat": "Available Replicas"
-            },
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "kube_deployment_spec_replicas{namespace=\"workload-system\", deployment=\"target-workload\"} or vector(0)",
-              "legendFormat": "Desired Replicas"
-            }
-          ]
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": { "defaults": { "unit": "reqps" } },
-          "gridPos": { "h": 8, "w": 9, "x": 6, "y": 1 },
-          "id": 2,
-          "title": "HTTP Request Throughput (RPS)",
-          "type": "timeseries",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "sum(rate(workload_http_requests_total{namespace=\"workload-system\"}[1m])) by (path, status)",
-              "legendFormat": "{{path}} [{{status}}]"
-            }
-          ]
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": { "defaults": { "unit": "s" } },
-          "gridPos": { "h": 8, "w": 9, "x": 15, "y": 1 },
-          "id": 3,
-          "title": "Request Latency Percentiles (p50 / p95 / p99)",
-          "type": "timeseries",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "histogram_quantile(0.99, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[1m])) by (le))",
-              "legendFormat": "p99 Latency"
-            },
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "histogram_quantile(0.95, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[1m])) by (le))",
-              "legendFormat": "p95 Latency"
-            },
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "histogram_quantile(0.50, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[1m])) by (le))",
-              "legendFormat": "p50 Latency"
-            }
-          ]
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": { "defaults": { "unit": "core" } },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
-          "id": 4,
-          "title": "Pod Real-Time CPU Utilization (cores)",
-          "type": "timeseries",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"workload-system\", container=\"target-service\"}[1m])) by (pod)",
-              "legendFormat": "{{pod}} (cAdvisor)"
-            },
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "kube_pod_container_resource_requests{namespace=\"workload-system\", container=\"target-service\", resource=\"cpu\"}",
-              "legendFormat": "Request Threshold (100m)"
-            }
-          ]
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": { "defaults": { "unit": "bytes" } },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
-          "id": 5,
-          "title": "Pod Memory Working Set vs Limits",
-          "type": "timeseries",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"workload-system\", container=\"target-service\"}) by (pod)",
-              "legendFormat": "{{pod}} (Memory WS)"
-            },
-            {
-              "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "kube_pod_container_resource_limits{namespace=\"workload-system\", container=\"target-service\", resource=\"memory\"}",
-              "legendFormat": "Limit Threshold (512Mi)"
-            }
-          ]
-        }
-      ],
-      "refresh": "5s",
-      "schemaVersion": 38,
-      "style": "dark",
-      "tags": ["autoscaling", "epic1", "telemetry"],
-      "time": { "from": "now-15m", "to": "now" },
-      "timezone": "browser",
-      "title": "Target Workload Telemetry (Epic 1)",
-      "uid": "target-workload-epic1"
-    }
+  target-workload.json: "{\n  \"annotations\": {\n    \"list\": []\n  },\n  \"editable\"\
+    : true,\n  \"fiscalYearStartMonth\": 0,\n  \"graphTooltip\": 1,\n  \"id\": 2,\n\
+    \  \"links\": [],\n  \"liveNow\": false,\n  \"panels\": [\n    {\n      \"collapsed\"\
+    : false,\n      \"gridPos\": { \"h\": 1, \"w\": 24, \"x\": 0, \"y\": 0 },\n  \
+    \    \"id\": 100,\n      \"title\": \"Target Workload Golden Signals & Autoscaling\
+    \ Telemetry\",\n      \"type\": \"row\"\n    },\n    {\n      \"datasource\":\
+    \ { \"type\": \"prometheus\", \"uid\": \"prometheus\" },\n      \"fieldConfig\"\
+    : {\n        \"defaults\": {\n          \"color\": { \"mode\": \"palette-classic\"\
+    \ },\n          \"custom\": {\n            \"axisCenteredZero\": false,\n    \
+    \        \"axisColorMode\": \"text\",\n            \"drawStyle\": \"line\",\n\
+    \            \"lineInterpolation\": \"smooth\",\n            \"lineWidth\": 2,\n\
+    \            \"showPoints\": \"auto\",\n            \"spanNulls\": true\n    \
+    \      },\n          \"min\": 0,\n          \"unit\": \"short\"\n        }\n \
+    \     },\n      \"gridPos\": { \"h\": 8, \"w\": 6, \"x\": 0, \"y\": 1 },\n   \
+    \   \"id\": 1,\n      \"title\": \"Active Deployment Replicas\",\n      \"type\"\
+    : \"timeseries\",\n      \"targets\": [\n        {\n          \"datasource\":\
+    \ { \"type\": \"prometheus\", \"uid\": \"prometheus\" },\n          \"expr\":\
+    \ \"kube_deployment_status_replicas_available{namespace=\\\"workload-system\\\"\
+    , deployment=\\\"target-workload\\\"} or vector(2)\",\n          \"legendFormat\"\
+    : \"Available Replicas\"\n        },\n        {\n          \"datasource\": { \"\
+    type\": \"prometheus\", \"uid\": \"prometheus\" },\n          \"expr\": \"kube_deployment_spec_replicas{namespace=\\\
+    \"workload-system\\\", deployment=\\\"target-workload\\\"} or vector(2)\",\n \
+    \         \"legendFormat\": \"Desired Replicas\"\n        }\n      ]\n    },\n\
+    \    {\n      \"datasource\": { \"type\": \"prometheus\", \"uid\": \"prometheus\"\
+    \ },\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\":\
+    \ { \"mode\": \"palette-classic\" },\n          \"custom\": {\n            \"\
+    axisCenteredZero\": false,\n            \"axisColorMode\": \"text\",\n       \
+    \     \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"smooth\"\
+    ,\n            \"lineWidth\": 2,\n            \"showPoints\": \"auto\",\n    \
+    \        \"spanNulls\": true\n          },\n          \"min\": 0,\n          \"\
+    unit\": \"reqps\"\n        }\n      },\n      \"gridPos\": { \"h\": 8, \"w\":\
+    \ 9, \"x\": 6, \"y\": 1 },\n      \"id\": 2,\n      \"title\": \"HTTP Request\
+    \ Throughput (RPS)\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n\
+    \        {\n          \"datasource\": { \"type\": \"prometheus\", \"uid\": \"\
+    prometheus\" },\n          \"expr\": \"sum(rate(workload_http_requests_total{namespace=\\\
+    \"workload-system\\\"}[2m])) by (path, status)\",\n          \"legendFormat\"\
+    : \"{{path}} [{{status}}]\"\n        }\n      ]\n    },\n    {\n      \"datasource\"\
+    : { \"type\": \"prometheus\", \"uid\": \"prometheus\" },\n      \"fieldConfig\"\
+    : {\n        \"defaults\": {\n          \"color\": { \"mode\": \"palette-classic\"\
+    \ },\n          \"custom\": {\n            \"axisCenteredZero\": false,\n    \
+    \        \"axisColorMode\": \"text\",\n            \"drawStyle\": \"line\",\n\
+    \            \"lineInterpolation\": \"smooth\",\n            \"lineWidth\": 2,\n\
+    \            \"showPoints\": \"auto\",\n            \"spanNulls\": true\n    \
+    \      },\n          \"min\": 0,\n          \"unit\": \"s\"\n        }\n     \
+    \ },\n      \"gridPos\": { \"h\": 8, \"w\": 9, \"x\": 15, \"y\": 1 },\n      \"\
+    id\": 3,\n      \"title\": \"Request Latency Percentiles (p50 / p95 / p99)\",\n\
+    \      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"\
+    datasource\": { \"type\": \"prometheus\", \"uid\": \"prometheus\" },\n       \
+    \   \"expr\": \"histogram_quantile(0.99, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\\\
+    \"workload-system\\\"}[2m])) by (le))\",\n          \"legendFormat\": \"p99 Latency\"\
+    \n        },\n        {\n          \"datasource\": { \"type\": \"prometheus\"\
+    , \"uid\": \"prometheus\" },\n          \"expr\": \"histogram_quantile(0.95, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\\\
+    \"workload-system\\\"}[2m])) by (le))\",\n          \"legendFormat\": \"p95 Latency\"\
+    \n        },\n        {\n          \"datasource\": { \"type\": \"prometheus\"\
+    , \"uid\": \"prometheus\" },\n          \"expr\": \"histogram_quantile(0.50, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\\\
+    \"workload-system\\\"}[2m])) by (le))\",\n          \"legendFormat\": \"p50 Latency\"\
+    \n        }\n      ]\n    },\n    {\n      \"datasource\": { \"type\": \"prometheus\"\
+    , \"uid\": \"prometheus\" },\n      \"fieldConfig\": {\n        \"defaults\":\
+    \ {\n          \"color\": { \"mode\": \"palette-classic\" },\n          \"custom\"\
+    : {\n            \"axisCenteredZero\": false,\n            \"axisColorMode\":\
+    \ \"text\",\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\"\
+    : \"smooth\",\n            \"lineWidth\": 2,\n            \"showPoints\": \"auto\"\
+    ,\n            \"spanNulls\": true\n          },\n          \"min\": 0,\n    \
+    \      \"unit\": \"cores\"\n        }\n      },\n      \"gridPos\": { \"h\": 8,\
+    \ \"w\": 12, \"x\": 0, \"y\": 9 },\n      \"id\": 4,\n      \"title\": \"Pod Real-Time\
+    \ CPU Utilization (cores)\",\n      \"type\": \"timeseries\",\n      \"targets\"\
+    : [\n        {\n          \"datasource\": { \"type\": \"prometheus\", \"uid\"\
+    : \"prometheus\" },\n          \"expr\": \"sum(rate(container_cpu_usage_seconds_total{namespace=\\\
+    \"workload-system\\\", container=\\\"target-service\\\"}[2m])) by (pod)\",\n \
+    \         \"legendFormat\": \"{{pod}} (cAdvisor)\"\n        },\n        {\n  \
+    \        \"datasource\": { \"type\": \"prometheus\", \"uid\": \"prometheus\" },\n\
+    \          \"expr\": \"kube_pod_container_resource_requests{namespace=\\\"workload-system\\\
+    \", container=\\\"target-service\\\", resource=\\\"cpu\\\"} or vector(0.1)\",\n\
+    \          \"legendFormat\": \"Request Threshold (100m)\"\n        }\n      ]\n\
+    \    },\n    {\n      \"datasource\": { \"type\": \"prometheus\", \"uid\": \"\
+    prometheus\" },\n      \"fieldConfig\": {\n        \"defaults\": {\n         \
+    \ \"color\": { \"mode\": \"palette-classic\" },\n          \"custom\": {\n   \
+    \         \"axisCenteredZero\": false,\n            \"axisColorMode\": \"text\"\
+    ,\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"\
+    smooth\",\n            \"lineWidth\": 2,\n            \"showPoints\": \"auto\"\
+    ,\n            \"spanNulls\": true\n          },\n          \"min\": 0,\n    \
+    \      \"unit\": \"bytes\"\n        }\n      },\n      \"gridPos\": { \"h\": 8,\
+    \ \"w\": 12, \"x\": 12, \"y\": 9 },\n      \"id\": 5,\n      \"title\": \"Pod\
+    \ Memory Working Set vs Limits\",\n      \"type\": \"timeseries\",\n      \"targets\"\
+    : [\n        {\n          \"datasource\": { \"type\": \"prometheus\", \"uid\"\
+    : \"prometheus\" },\n          \"expr\": \"sum(container_memory_working_set_bytes{namespace=\\\
+    \"workload-system\\\", container=\\\"target-service\\\"}) by (pod)\",\n      \
+    \    \"legendFormat\": \"{{pod}} (Memory WS)\"\n        },\n        {\n      \
+    \    \"datasource\": { \"type\": \"prometheus\", \"uid\": \"prometheus\" },\n\
+    \          \"expr\": \"kube_pod_container_resource_limits{namespace=\\\"workload-system\\\
+    \", container=\\\"target-service\\\", resource=\\\"memory\\\"} or vector(536870912)\"\
+    ,\n          \"legendFormat\": \"Limit Threshold (512Mi)\"\n        }\n      ]\n\
+    \    }\n  ],\n  \"refresh\": \"5s\",\n  \"schemaVersion\": 38,\n  \"style\": \"\
+    dark\",\n  \"tags\": [\"autoscaling\", \"epic1\", \"telemetry\"],\n  \"time\"\
+    : { \"from\": \"now-15m\", \"to\": \"now\" },\n  \"timepicker\": { \"refresh_intervals\"\
+    : [\"5s\", \"10s\", \"30s\", \"1m\"] },\n  \"timezone\": \"browser\",\n  \"title\"\
+    : \"Target Workload Telemetry (Epic 1)\",\n  \"uid\": \"target-workload-epic1\"\
+    \n}\n"

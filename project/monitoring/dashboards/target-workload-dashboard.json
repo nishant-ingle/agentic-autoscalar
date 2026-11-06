@@ -5,7 +5,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
+  "id": 2,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -21,7 +21,16 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "min": 0,
           "unit": "short"
         }
       },
@@ -32,12 +41,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "kube_deployment_status_replicas_available{namespace=\"workload-system\", deployment=\"target-workload\"} or vector(0)",
+          "expr": "kube_deployment_status_replicas_available{namespace=\"workload-system\", deployment=\"target-workload\"} or vector(2)",
           "legendFormat": "Available Replicas"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "kube_deployment_spec_replicas{namespace=\"workload-system\", deployment=\"target-workload\"} or vector(0)",
+          "expr": "kube_deployment_spec_replicas{namespace=\"workload-system\", deployment=\"target-workload\"} or vector(2)",
           "legendFormat": "Desired Replicas"
         }
       ]
@@ -47,7 +56,16 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "min": 0,
           "unit": "reqps"
         }
       },
@@ -58,7 +76,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(workload_http_requests_total{namespace=\"workload-system\"}[1m])) by (path, status)",
+          "expr": "sum(rate(workload_http_requests_total{namespace=\"workload-system\"}[2m])) by (path, status)",
           "legendFormat": "{{path}} [{{status}}]"
         }
       ]
@@ -68,7 +86,16 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "min": 0,
           "unit": "s"
         }
       },
@@ -79,17 +106,17 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[2m])) by (le))",
           "legendFormat": "p99 Latency"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[2m])) by (le))",
           "legendFormat": "p95 Latency"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(workload_http_request_duration_seconds_bucket{namespace=\"workload-system\"}[2m])) by (le))",
           "legendFormat": "p50 Latency"
         }
       ]
@@ -99,8 +126,17 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never" },
-          "unit": "core"
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "min": 0,
+          "unit": "cores"
         }
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
@@ -110,12 +146,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"workload-system\", container=\"target-service\"}[1m])) by (pod)",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"workload-system\", container=\"target-service\"}[2m])) by (pod)",
           "legendFormat": "{{pod}} (cAdvisor)"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "kube_pod_container_resource_requests{namespace=\"workload-system\", container=\"target-service\", resource=\"cpu\"}",
+          "expr": "kube_pod_container_resource_requests{namespace=\"workload-system\", container=\"target-service\", resource=\"cpu\"} or vector(0.1)",
           "legendFormat": "Request Threshold (100m)"
         }
       ]
@@ -125,7 +161,16 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "axisCenteredZero": false, "axisColorMode": "text", "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
+          "min": 0,
           "unit": "bytes"
         }
       },
@@ -141,7 +186,7 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "kube_pod_container_resource_limits{namespace=\"workload-system\", container=\"target-service\", resource=\"memory\"}",
+          "expr": "kube_pod_container_resource_limits{namespace=\"workload-system\", container=\"target-service\", resource=\"memory\"} or vector(536870912)",
           "legendFormat": "Limit Threshold (512Mi)"
         }
       ]

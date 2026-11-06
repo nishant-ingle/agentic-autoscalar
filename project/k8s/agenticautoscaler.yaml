@@ -1,0 +1,18 @@
+apiVersion: autoscaling.autoscale.ai/v1alpha1
+kind: AgenticAutoscaler
+metadata:
+  name: target-workload-autoscaler
+  namespace: workload-system
+  labels:
+    app.kubernetes.io/name: target-workload-autoscaler
+    app.kubernetes.io/part-of: agentic-autoscaler
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    name: target-workload
+    apiVersion: apps/v1
+  minReplicas: 1
+  maxReplicas: 5
+  pollingIntervalSeconds: 15
+  cooldownPeriodSeconds: 60
+  reasonerURL: "http://reasoner-service.workload-system.svc.cluster.local:8000/evaluate-scaling"

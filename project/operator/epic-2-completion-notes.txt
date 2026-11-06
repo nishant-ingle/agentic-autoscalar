@@ -1,0 +1,282 @@
+I have implemented EPIC-201: Scaffold Custom Operator via Kubebuilder (client-go) end-to-end.
+──────
+### Summary of Implementation
+
+1. Scaffolded Kubebuilder Project Structure:
+    • Initialized the Kubebuilder project with domain autoscale.ai and repository github.
+    com/nishant-ingle/agentic-autoscaler in operator (with a root symlink operator).
+    • Scaffolded API group autoscaling.autoscale.ai, version v1alpha1, and kind AgenticAutoscaler.
+2. Defined Custom Resource Definition (AgenticAutoscaler):
+    • agenticautoscaler_types.go:44-78:
+        • ScaleTargetRef: CrossVersionObjectReference tracking target deployment name and kind.
+        • MinReplicas & MaxReplicas: Scaling boundaries.
+        • PollingIntervalSeconds: Configurable reconciliation and metrics polling interval (default
+        15s).
+        • CooldownPeriodSeconds: Guardrail hysteresis cooldown period (default 60s).
+        • ReasonerURL: Endpoint for future AI reasoning integration (Epic 3).
+        • Status: Tracks currentReplicas, readyReplicas, desiredReplicas, observedGeneration,
+        lastReconcileTime, and conditions (TargetFound, ScalingActive).
+        • Added Kubebuilder printer columns for kubectl get aa.
+
+3. Implemented Core Controller Reconcile Loop Logic:
+    • agenticautoscaler_controller.go:
+        • Reads the AgenticAutoscaler custom resource and resolves its target deployment via client-
+        go.
+        • Inspects deployment.Spec.Replicas, deployment.Status.Replicas, readyReplicas, and
+        availableReplicas.
+        • Watches both AgenticAutoscaler and appsv1.Deployment changes via
+        EnqueueRequestsFromMapFunc.
+        • Emits structured logs on every reconciliation loop.
+        • Updates status subresources with conditions and observed state.
+        • Schedules the next polling cycle based on PollingIntervalSeconds.
+
+4. Configured RBAC Markers:
+    • Added RBAC annotations for deployments, deployment status, and deployment scale subresources
+    (// +kubebuilder:rbac:groups=apps,resources=deployments/scale,verbs=get;update;patch).
+    • Generated ClusterRole in role.yaml.
+5. Integrated Manifests & Makefile Automation:
+    • Added target workload autoscaler manifest: agenticautoscaler.yaml.
+    • Added convenience targets to Makefile:
+        • make operator-install
+        • make operator-build
+        • make operator-run
+        • make operator-apply-sample
+        • make operator-undeploy
+──────
+### Verification Against Acceptance Criteria
+[✓] CRD applied to local cluster:
+  $ kubectl get crd agenticautoscalers.autoscaling.autoscale.ai
+  NAME                                          CREATED AT
+  agenticautoscalers.autoscaling.autoscale.ai   2026-11-05T19:21:38Z
+
+[✓] Controller starts and watches target resource changes:
+    • Successfully connected to the cluster and reconciled target-workload-autoscaler in namespace
+    workload-system.
+    • When the target deployment was scaled (2 -> 3), the controller automatically intercepted the
+    event, reconciled, and updated the CR status in real-time.
+[✓] Structured logs reflecting deployment states:
+  INFO Reconcile loop: observed target deployment state {
+    "autoscaler": "workload-system/target-workload-autoscaler",
+    "targetDeployment": "workload-system/target-workload",
+    "specReplicas": 2,
+    "statusReplicas": 2,
+    "readyReplicas": 2,
+    "availableReplicas": 2,
+    "minReplicas": 1,
+    "maxReplicas": 5,
+    "pollingIntervalSeconds": 15
+  }
+
+Acceptance criteria in plan.txt:67-72 have been updated to complete [*]. Ready for Epic 3!
+ 
+
+# Usage
+
+
+Now that EPIC-101 is running (after make deploy and make port-forward), here is the exact sequence of commands to install
+and verify EPIC-201 on a fresh Kubernetes cluster.
+──────
+### Step 1: Install the CRD & Deploy the Sample Autoscaler Resource
+From the project directory (or repository root):
+  cd project
+
+  # 1. Install the AgenticAutoscaler CustomResourceDefinition into the cluster
+  make operator-install
+
+  # 2. Apply the sample AgenticAutoscaler resource pointing to the target-workload deployment
+  make operator-apply-sample
+
+(You can verify the CR is registered with kubectl get aa -n workload-system)
+──────
+### Step 2: Run the Operator Controller
+
+In a dedicated terminal tab, start the Kubebuilder controller manager:
+  cd project
+  make operator-run
+
+You will see the controller start up and log structured events:
+
+  INFO Starting EventSource {"source": "kind source: *v1alpha1.AgenticAutoscaler"}
+  INFO Starting EventSource {"source": "kind source: *v1.Deployment"}
+  INFO Starting Controller  {"controller": "agenticautoscaler"}
+  INFO Reconcile loop: observed target deployment state {
+    "autoscaler": "workload-system/target-workload-autoscaler",
+    "targetDeployment": "workload-system/target-workload",
+    "specReplicas": 2,
+    "statusReplicas": 2,
+    "readyReplicas": 2,
+    "minReplicas": 1,
+    "maxReplicas": 5,
+    "pollingIntervalSeconds": 15
+  }
+──────
+### Step 3: Test & Verify
+
+You have two options: Automated or Manual.
+#### Option A: One-Command Automated Test (Recommended)
+
+In another terminal window:
+  cd project
+  make verify-operator
+
+This runs verify-operator.sh which automatically executes:
+1. [Check 1/4] Verifies agenticautoscalers.autoscaling.autoscale.ai CRD registration.
+2. [Check 2/4] Verifies the target-workload-autoscaler CR exists.
+3. [Check 3/4] Asserts controller status conditions (TargetFound=True, ScalingActive=True).
+4. [Check 4/4] Dynamic watch verification: scales target-workload from 2 to 3 replicas, confirms the controller catches the
+event and updates desiredReplicas to 3, then cleanly resets back to 2 replicas.
+
+#### Option B: Manual Inspection & Testing
+
+1. Inspect CR printer columns and status:
+  kubectl get agenticautoscaler -n workload-system
+  kubectl describe agenticautoscaler target-workload-autoscaler -n workload-system
+
+2. Test dynamic event watching:
+Scale the workload manually:
+  kubectl scale deployment target-workload -n workload-system --replicas=3
+
+    • Watch the controller terminal tab: it will immediately log the new replica state.
+    • Run kubectl get aa -n workload-system and verify CURRENT and DESIRED update to 3.
+3. Reset back to baseline:
+  kubectl scale deployment target-workload -n workload-system --replicas=2
+
+──────
+### Cleanup (When Needed)
+
+To tear down the Epic 2 custom resource and CRD:
+
+  make operator-undeploy
+
+
+# Simple Words Explanation
+
+Here is a complete, beginner-friendly yet detailed walkthrough of everything that was done for EPIC-201, why each decision was made, and how each component works under the hood.
+──────
+### 1. The Goal of EPIC-201
+In Epic 1, you created the target microservice (target-workload) and Prometheus telemetry.
+In Epic 2, we needed to build the Kubernetes Control Plane foundation—a custom Kubernetes Operator(Controller + Custom Resource Definition) written in Go using Kubebuilder and client-go.
+
+Its job is:
+1. Introduce a new Kubernetes resource kind called AgenticAutoscaler.
+2. Run a continuous background loop (Reconciliation loop) that monitors the target deployment's current replicas, readiness, and configuration.
+3. React automatically whenever either the autoscaler configuration or the target deployment changes.
+
+──────
+### 2. Step-by-Step Implementation
+
+#### Step 1: Choosing Directory Structure & macOS Quirk Resolution
+
+• Kubebuilder creates a project metadata file named PROJECT (uppercase) in the root of the operator project.
+• Because macOS filesystems are case-insensitive by default, a file named PROJECT collides with the existing project/ directory if placed at the top level.
+• Therefore, we placed the operator inside **operator**. This keeps it neatly alongside your other services (project/target-service/, project/k8s/, etc.).
+
+#### Step 2: Project Initialization
+
+Inside project/operator, we ran Kubebuilder commands:
+
+kubebuilder init --domain autoscale.ai --repo github.com/nishant-ingle/agentic-autoscalar
+kubebuilder create api --group autoscaling --version v1alpha1 --kind AgenticAutoscaler --resource --controller
+
+This generated:
+• api/v1alpha1/: Where our Custom Resource Definition schema lives in Go.
+• internal/controller/: Where our reconciler logic lives.
+• cmd/main.go: The controller manager entrypoint.
+• config/: Kustomize YAML manifests for CRDs, RBAC roles, and deployment.
+
+#### Step 3: Tooling & Go 1.27 Compatibility Fix
+When Kubebuilder tried to download controller-gen (the tool that generates YAML CRDs from Go
+comments), the default older version crashed on Go 1.27.
+• We updated project/operator/Makefile to use controller-tools v0.23.0.
+• This resolved the issue and enabled smooth generation of CRDs and deep-copy code (make generate &&
+make manifests).
+
+#### Step 4: Designing the CRD Schema (agenticautoscaler_types.go)
+
+In agenticautoscaler_types.go, we designed what an AgenticAutoscaler resource looks like in
+Kubernetes YAML:
+
+1. Spec (What the user wants):
+    • scaleTargetRef: Identifies which workload to scale (kind: Deployment, name: target-workload, apiVersion: apps/v1).
+    • minReplicas: The minimum allowed pod count (defaults to 1, minimum validation 1).
+    • maxReplicas: The maximum allowed pod count (required, e.g. 5).
+    • pollingIntervalSeconds: How often the controller should inspect the deployment and poll
+    metrics (defaults to 15 seconds).
+    • cooldownPeriodSeconds: Cooldown window to prevent flapping (for future Epic 6 safety
+    guardrails, defaults to 60 seconds).
+    • reasonerURL: URL pointing to the FastAPI/LangGraph AI reasoning service (ready for Epic 3).
+2. Status (What the controller observes in real time):
+    • currentReplicas: Replicas currently running according to the Deployment.
+    • readyReplicas: How many pods are actually passing readiness probes.
+    • desiredReplicas: Target replica count desired by the spec.
+    • lastReconcileTime: Timestamp of the last successful inspection.
+    • conditions: Kubernetes-native conditions array (TargetFound=True, ScalingActive=True).
+3. kubectl Printer Columns:
+Added Kubebuilder annotations so that running kubectl get aa shows a clean table:
+NAME                         TARGET            MIN   MAX   CURRENT   DESIRED   AGE
+target-workload-autoscaler   target-workload   1     5     2         2         30s
+#### Step 5: Implementing the Controller Logic (agenticautoscaler_controller.go)
+In agenticautoscaler_controller.go, we wrote the core reconciliation loop:
+
+1. Fetch Custom Resource:
+    • The loop receives a request (namespace, name) of an AgenticAutoscaler.
+    • If the object was deleted from Kubernetes, it exits cleanly.
+2. Find Target Deployment:
+    • Using client-go, it looks up the Deployment specified in scaleTargetRef.name.
+    • If the Deployment does not exist, it marks Condition: TargetFound=False, logs a warning, and retries later.
+3. Read Workload Telemetry & Replica State:
+    • It reads:
+        • deployment.Spec.Replicas (configured replicas)
+        • deployment.Status.Replicas (running pods)
+        • deployment.Status.ReadyReplicas (healthy pods passing /readyz)
+        • deployment.Status.AvailableReplicas
+4. Emit Structured Logging:
+    • Uses Controller-Runtime's structured logger to output detailed JSON/key-value logs:
+    Reconcile loop: observed target deployment state:
+        autoscaler=workload-system/target-workload-autoscaler
+        targetDeployment=workload-system/target-workload
+        specReplicas=2 statusReplicas=2 readyReplicas=2
+        minReplicas=1 maxReplicas=5 pollingIntervalSeconds=15
+
+5. Update .status Subresource:
+    • Sets conditions (TargetFound=True, ScalingActive=True).
+    • Updates currentReplicas, readyReplicas, desiredReplicas, and lastReconcileTime.
+6. Schedule Next Cycle:
+    • Returns ctrl.Result{RequeueAfter: time.Duration(pollingInterval) * time.Second}, guaranteeing the controller re-polls every 15 seconds.
+7. Dynamic Event Watching (findAutoscalersForDeployment):
+    • Standard polling is good, but waiting 15 seconds when something happens is slow.
+    • We registered a Kubernetes watch on appsv1.Deployment. If anyone scales the target deployment or a pod crashes, Kubernetes notifies the controller immediately to reconcile without waiting for the 15-second timer.
+
+#### Step 6: RBAC Permissions
+In Go comments above the controller, we configured Kubebuilder RBAC markers:
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=apps,resources=deployments/scale,verbs=get;update;patch
+// +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
+// +kubebuilder:rbac:groups=autoscaling.autoscale.ai,resources=agenticautoscalers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=autoscaling.autoscale.ai,resources=agenticautoscalers/status,verbs=get;update;patch
+
+controller-gen translated these into role.yaml.
+
+#### Step 7: Sample Manifest & Automation Scripts
+
+1. Sample CR: Created agenticautoscaler.yaml configuring the autoscaler for target-workload in
+workload-system.
+2. Automated Verification Script: Created verify-operator.sh which verifies CRD registration, CR
+presence, condition status, and performs a live scaling test (2 -> 3 -> 2).
+3. Makefile Targets: Added operator-install, operator-build, operator-run, operator-apply-sample,
+verify-operator, and operator-undeploy to Makefile.
+──────
+### 3. How It Was Verified on the Live Cluster
+
+1. Applied the CRD:
+kubectl get crd agenticautoscalers.autoscaling.autoscale.ai confirmed CRD created.
+2. Applied the sample resource:
+kubectl apply -f project/k8s/agenticautoscaler.yaml created target-workload-autoscaler.
+3. Ran the controller manager:
+The controller initialized, discovered the custom resource, inspected target-workload, and wrote
+status back.
+4. Performed dynamic test:
+Scaled the deployment to 3 replicas (kubectl scale deployment target-workload --replicas=3). The
+controller intercepted the event immediately, logged the new replica state, and updated status.
+currentReplicas and status.desiredReplicas to 3. Scaled it back to 2 to return to baseline.
+5. Marked acceptance criteria in plan.txt as [*].
