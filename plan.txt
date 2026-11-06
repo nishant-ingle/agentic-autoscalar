@@ -66,9 +66,9 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 #### **Acceptance Criteria:**
 
-* [ ] CRD successfully applied to the local Kubernetes cluster.
-* [ ] Controller starts locally without errors, successfully watching target resource changes.
-* [ ] `Reconcile` loop outputs structured logs reflecting current target deployment states.
+* [*] CRD successfully applied to the local Kubernetes cluster.
+* [*] Controller starts locally without errors, successfully watching target resource changes.
+* [*] `Reconcile` loop outputs structured logs reflecting current target deployment states.
 
 ---
 

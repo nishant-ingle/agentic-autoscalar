@@ -40,7 +40,7 @@ if [ "${TARGET_FOUND}" == "True" ] && [ "${SCALING_ACTIVE}" == "True" ]; then
   echo "✔ Observed replicas: ${CURRENT_REPLICAS}"
 else
   echo "✖ Controller has not reconciled or conditions are not True yet."
-  echo "  (Make sure the controller is running: 'make operator-run')"
+  echo "  (Make sure the controller is running: 'make operator-run' or 'make operator-deploy')"
   echo "  TargetFound: '${TARGET_FOUND}', ScalingActive: '${SCALING_ACTIVE}'"
   exit 1
 fi

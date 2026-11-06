@@ -1,7 +1,9 @@
-.PHONY: all build-docker deploy test-traffic verify port-forward help undeploy swagger operator-build operator-install operator-run operator-apply-sample operator-undeploy verify-operator
+.PHONY: all build-docker deploy test-traffic verify port-forward help undeploy swagger operator-build operator-install operator-run operator-apply-sample operator-undeploy verify-operator operator-docker-build operator-deploy operator-logs
 
 NAMESPACE_WORKLOAD := workload-system
 NAMESPACE_MONITORING := monitoring
+OPERATOR_IMG ?= agentic-autoscaler:latest
+KIND_CLUSTER_NAME ?= desktop
 
 help:
 	@echo "Available commands for Epic 1 & 2:"
@@ -13,10 +15,13 @@ help:
 	@echo "  make undeploy              Tear down deployed manifests and Helm releases"
 	@echo "  make operator-install      Install the AgenticAutoscaler CRD into the cluster"
 	@echo "  make operator-build        Build the Kubebuilder controller manager binary"
-	@echo "  make operator-run          Run the AgenticAutoscaler controller locally against the cluster"
+	@echo "  make operator-docker-build Build the controller manager container image"
+	@echo "  make operator-run          Run the AgenticAutoscaler controller locally on host"
+	@echo "  make operator-deploy       Build, load, and deploy the operator into the cluster"
+	@echo "  make operator-logs         Stream logs from the in-cluster operator deployment"
 	@echo "  make operator-apply-sample Apply sample AgenticAutoscaler CR pointing to target-workload"
 	@echo "  make verify-operator       Run automated test suite for Epic 2 controller & CRD"
-	@echo "  make operator-undeploy     Delete sample AgenticAutoscaler CR and uninstall CRD"
+	@echo "  make operator-undeploy     Delete sample CR, operator deployment, and uninstall CRD"
 
 build-docker:
 	@echo "Building docker image..."
@@ -86,9 +91,29 @@ operator-install:
 	@echo "Installing AgenticAutoscaler CRD..."
 	cd operator && make install
 
+# Development: runs the controller locally (no leader election across pods)
 operator-run:
 	@echo "Starting AgenticAutoscaler controller..."
 	cd operator && go run ./cmd/main.go
+
+operator-docker-build:
+	@echo "Building Agentic Autoscaler operator container image..."
+	cd operator && docker build -t $(OPERATOR_IMG) .
+
+# In-cluster deployment: builds image, loads into local cluster, and deploys via Kustomize
+operator-deploy: operator-docker-build
+	@echo "Ensuring image is available in local cluster..."
+	@which kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$" && \
+		(echo "Loading image $(OPERATOR_IMG) into Kind cluster '$(KIND_CLUSTER_NAME)'..." && kind load docker-image $(OPERATOR_IMG) --name $(KIND_CLUSTER_NAME)) || true
+	@echo "Deploying Agentic Autoscaler controller manager to cluster..."
+	cd operator && make deploy IMG=$(OPERATOR_IMG)
+	@echo "Waiting for operator controller manager deployment to become ready..."
+	kubectl rollout status deployment/operator-controller-manager -n operator-system --timeout=90s
+	@echo "Agentic Autoscaler operator successfully deployed in operator-system namespace."
+
+operator-logs:
+	@echo "Streaming logs from Agentic Autoscaler controller manager..."
+	kubectl logs -f deployment/operator-controller-manager -n operator-system
 
 operator-apply-sample:
 	@echo "Applying AgenticAutoscaler custom resource..."
@@ -99,6 +124,7 @@ verify-operator:
 	@./scripts/verify-operator.sh workload-system
 
 operator-undeploy:
-	@echo "Cleaning up AgenticAutoscaler custom resources and CRD..."
+	@echo "Cleaning up AgenticAutoscaler custom resources, controller deployment, and CRD..."
 	-kubectl delete -f k8s/agenticautoscaler.yaml --ignore-not-found
-	cd operator && make uninstall
+	-cd operator && make undeploy ignore-not-found=true
+	-cd operator && make uninstall ignore-not-found=true
