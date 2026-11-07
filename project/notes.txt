@@ -47,3 +47,46 @@
 
 	c. Pod logs
 		kubectl logs -l app=target-workload -n workload-system --tail=50
+
+6. Commands to run the project
+
+	[t1: go/gin dummy app to simulate workload]
+		make app-deploy
+
+		local-test:
+			make app-port-forward
+			make app-test-traffic
+
+	[t2: k8s operator]
+		make operator-deploy
+        make operator-apply-sample
+        make operator-undeploy
+
+		local-test:
+			make operator-run
+			make operator-verify
+
+	[t3: fastapi/langgraph app]
+		make reasoner-deploy
+		make reasoner-logs
+		make reasoner-undeploy
+
+		local-test:
+			# 1. Run the 10 automated unit and integration tests
+			make reasoner-test
+
+			# 2. Start the service locally on port 8000
+			make reasoner-run
+
+			# 3. In another terminal, run the acceptance verification script
+			make reasoner-verify
+
+Stage            │ Target Microservice (app-*)    │ Kubernetes Operator (operator-*)    │ AI Reasoning Layer (reasoner-*)
+──────────────────┼────────────────────────────────┼─────────────────────────────────────┼─────────────────────────────────
+Compile / Test   │ make app-build                 │ make operator-build                 │ make reasoner-test
+Container Build  │ make app-docker-build          │ make operator-docker-build          │ make reasoner-docker-build
+Deploy           │ make app-deploy                │ make operator-deploy                │ make reasoner-deploy
+Stream Logs      │ make app-logs                  │ make operator-logs                  │ make reasoner-logs
+Verify / Test    │ make app-test-trafficmake app- │ make operator-verify(make operator- │ make reasoner-verify
+				 │ verify                         │ apply-sample)                       │
+Undeploy / Clean │ make app-undeploy              │ make operator-undeploy              │ make reasoner-undeploy

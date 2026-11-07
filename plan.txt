@@ -97,9 +97,9 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 #### **Acceptance Criteria:**
 
-* [ ] FastAPI app boots asynchronously and exposes an `/evaluate-scaling` endpoint.
-* [ ] Pydantic validation rejects malformed telemetry payloads with HTTP 422 errors automatically.
-* [ ] Agent correctly outputs a structured JSON scaling proposal (`target_replicas`, `action`, `reasoning`).
+* [*] FastAPI app boots asynchronously and exposes an `/evaluate-scaling` endpoint.
+* [*] Pydantic validation rejects malformed telemetry payloads with HTTP 422 errors automatically.
+* [*] Agent correctly outputs a structured JSON scaling proposal (`target_replicas`, `action`, `reasoning`).
 
 ---
 

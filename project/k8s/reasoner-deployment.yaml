@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reasoner-service
+  namespace: workload-system
+  labels:
+    app: reasoner-service
+    app.kubernetes.io/name: reasoner-service
+    app.kubernetes.io/component: ai-reasoning-engine
+    app.kubernetes.io/part-of: agentic-autoscaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reasoner-service
+  template:
+    metadata:
+      labels:
+        app: reasoner-service
+        app.kubernetes.io/name: reasoner-service
+    spec:
+      containers:
+        - name: reasoner
+          image: reasoner-service:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "8000"
+            - name: LLM_PROVIDER
+              value: "mock"
+          ports:
+            - name: http-reasoner
+              containerPort: 8000
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http-reasoner
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http-reasoner
+            initialDelaySeconds: 3
+            periodSeconds: 5
