@@ -128,9 +128,9 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 #### **Acceptance Criteria:**
 
-* [ ] MCP server successfully initializes and lists available tool definitions (`tools/list`).
-* [ ] FastAPI agent successfully invokes MCP server tools via the protocol client layer.
-* [ ] Security boundary test confirms write operations are entirely blocked at the MCP protocol level.
+* [*] MCP server successfully initializes and lists available tool definitions (`tools/list`).
+* [*] FastAPI agent successfully invokes MCP server tools via the protocol client layer.
+* [*] Security boundary test confirms write operations are entirely blocked at the MCP protocol level.
 
 ---
 

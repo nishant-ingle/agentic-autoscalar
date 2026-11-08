@@ -27,7 +27,23 @@ spec:
             - name: PORT
               value: "8000"
             - name: LLM_PROVIDER
-              value: "mock"
+              value: "openai"
+            - name: LLM_MODEL
+              value: "gpt-4o-mini"
+            - name: MCP_SERVER_URL
+              value: "http://mcp-server.workload-system.svc.cluster.local:8001/mcp"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: reasoner-llm-secret
+                  key: OPENAI_API_KEY
+                  optional: true
+            - name: OPENAI_API_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: reasoner-llm-secret
+                  key: OPENAI_API_BASE
+                  optional: true
           ports:
             - name: http-reasoner
               containerPort: 8000

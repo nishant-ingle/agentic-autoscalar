@@ -67,12 +67,13 @@
 			make operator-verify
 
 	[t3: fastapi/langgraph app]
+		# Automatically creates reasoner-llm-secret if OPENAI_API_KEY is found in .env / env vars
 		make reasoner-deploy
 		make reasoner-logs
 		make reasoner-undeploy
 
 		local-test:
-			# 1. Run the 10 automated unit and integration tests
+			# 1. Run the 12 automated unit and integration tests
 			make reasoner-test
 
 			# 2. Start the service locally on port 8000
@@ -81,12 +82,31 @@
 			# 3. In another terminal, run the acceptance verification script
 			make reasoner-verify
 
-Stage            │ Target Microservice (app-*)    │ Kubernetes Operator (operator-*)    │ AI Reasoning Layer (reasoner-*)
-──────────────────┼────────────────────────────────┼─────────────────────────────────────┼─────────────────────────────────
-Compile / Test   │ make app-build                 │ make operator-build                 │ make reasoner-test
-Container Build  │ make app-docker-build          │ make operator-docker-build          │ make reasoner-docker-build
-Deploy           │ make app-deploy                │ make operator-deploy                │ make reasoner-deploy
-Stream Logs      │ make app-logs                  │ make operator-logs                  │ make reasoner-logs
-Verify / Test    │ make app-test-trafficmake app- │ make operator-verify(make operator- │ make reasoner-verify
-				 │ verify                         │ apply-sample)                       │
-Undeploy / Clean │ make app-undeploy              │ make operator-undeploy              │ make reasoner-undeploy
+	[t4: mcp-server (k8s/prometheus tools)]
+		make mcp-deploy
+		make mcp-logs
+		make mcp-port-forward
+		make verify-mcp
+		make mcp-undeploy	
+
+		local-test:
+			# 1. Run the 13 automated unit and integration tests
+			make mcp-test
+
+			# 2. Start the MCP server locally on port 8001
+			make mcp-run
+			curl -s http://localhost:8001/info | jq in another terminal
+
+			# 3. In another terminal, run the acceptance verification script
+			make verify-mcp
+
+
+Stage          │ Target Microservice … │ Kubernetes Operator (oper… │ AI Reasoner Layer (reasone… │ MCP Server (mcp-*)
+────────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────┼───────────────────────
+Test           │ N/A                   │ make operator-verify       │ make reasoner-test          │ make mcp-test
+Build Docker   │ make app-docker-build │ make operator-docker-build │ make reasoner-docker-build  │ make mcp-docker-build
+Run Local      │ N/A                   │ make operator-run          │ make reasoner-run           │ make mcp-run
+Deploy Cluster │ make app-deploy       │ make operator-deploy       │ make reasoner-deploy        │ make mcp-deploy
+Stream Logs    │ make app-logs         │ make operator-logs         │ make reasoner-logs          │ make mcp-logs
+Verify / Test  │ make app-test-traffic │ make operator-verify       │ make reasoner-verify        │ make verify-mcp
+Undeploy       │ make app-undeploy     │ make operator-undeploy     │ make reasoner-undeploy      │ make mcp-undeploy

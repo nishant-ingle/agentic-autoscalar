@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     latency_spike_threshold_ms: float = 250.0
     error_rate_threshold_percent: float = 5.0
 
+    # MCP Integration: defaults to modern Streamable HTTP endpoint (/mcp)
+    mcp_server_url: str = os.getenv("MCP_SERVER_URL", "http://localhost:8001/mcp")
+
     model_config = {
         "env_file": ENV_FILE_PATH or ".env",
         "env_file_encoding": "utf-8",

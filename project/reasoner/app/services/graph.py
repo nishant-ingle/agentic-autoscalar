@@ -32,7 +32,9 @@ def analyze_telemetry_node(state: ReasonerState) -> Dict[str, Any]:
     latency_breach = payload.http_p99_latency_ms > latency_thresh
     high_error_rate = payload.error_rate_percent > 2.0
 
+    existing_analysis = state.get("analysis") or {}
     analysis = {
+        **existing_analysis,
         "cpu_ratio": round(cpu_ratio, 2),
         "is_cpu_high": payload.cpu_utilization_percent > (target_cpu * 1.15),
         "is_cpu_low": payload.cpu_utilization_percent < (target_cpu * 0.40),

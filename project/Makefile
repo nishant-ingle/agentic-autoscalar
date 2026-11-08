@@ -1,12 +1,14 @@
 .PHONY: all help port-forward deploy undeploy build-docker test-traffic verify swagger \
 	app-build-docker app-docker-build app-deploy app-port-forward app-logs app-test-traffic app-verify app-swagger app-undeploy \
 	operator-build operator-docker-build operator-install operator-run operator-deploy operator-logs operator-apply-sample operator-verify verify-operator operator-undeploy \
-	reasoner-test reasoner-run reasoner-docker-build reasoner-deploy reasoner-logs reasoner-verify verify-reasoner reasoner-undeploy
+	reasoner-test reasoner-run reasoner-docker-build reasoner-deploy reasoner-logs reasoner-verify verify-reasoner reasoner-undeploy \
+	mcp-test mcp-run mcp-docker-build mcp-deploy mcp-logs mcp-verify verify-mcp mcp-port-forward mcp-undeploy
 
 NAMESPACE_WORKLOAD := workload-system
 NAMESPACE_MONITORING := monitoring
 OPERATOR_IMG ?= agentic-autoscaler:latest
 REASONER_IMG ?= reasoner-service:latest
+MCP_IMG ?= mcp-server:latest
 KIND_CLUSTER_NAME ?= desktop
 
 help:
@@ -42,6 +44,16 @@ help:
 	@echo "  make reasoner-logs         Stream logs from in-cluster reasoner service"
 	@echo "  make verify-reasoner       (or make reasoner-verify) Run automated acceptance test for Epic 3"
 	@echo "  make reasoner-undeploy     Delete reasoner service deployment from cluster"
+	@echo ""
+	@echo "Model Context Protocol (MCP) Server (Epic 4 - k8s & Prometheus tools):"
+	@echo "  make mcp-test              Run pytest test suite for Epic 4 MCP Server"
+	@echo "  make mcp-run               Run MCP server locally on http://localhost:8001"
+	@echo "  make mcp-docker-build      Build MCP server container image"
+	@echo "  make mcp-deploy            Deploy MCP server to cluster in workload-system"
+	@echo "  make mcp-logs              Stream logs from in-cluster MCP server"
+	@echo "  make verify-mcp            (or make mcp-verify) Run automated acceptance test for Epic 4"
+	@echo "  make mcp-port-forward      Port-forward in-cluster MCP server to localhost:8001"
+	@echo "  make mcp-undeploy          Delete MCP server deployment, service, and RBAC"
 	@echo "================================================================================"
 
 # ==============================================================================
@@ -190,6 +202,21 @@ reasoner-deploy: reasoner-docker-build
 	@echo "Ensuring reasoner image is available in local cluster..."
 	@which kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$" && \
 		(echo "Loading image $(REASONER_IMG) into Kind cluster '$(KIND_CLUSTER_NAME)'..." && kind load docker-image $(REASONER_IMG) --name $(KIND_CLUSTER_NAME)) || true
+	@echo "Configuring in-cluster LLM credentials secret (if available in .env or environment)..."
+	@API_KEY=$$(grep -E "^OPENAI_API_KEY=" ../.env .env 2>/dev/null | head -n 1 | cut -d "=" -f2- | tr -d "\"'" || true); \
+	if [ -z "$$API_KEY" ]; then API_KEY="$$OPENAI_API_KEY"; fi; \
+	API_BASE=$$(grep -E "^OPENAI_API_BASE=" ../.env .env 2>/dev/null | head -n 1 | cut -d "=" -f2- | tr -d "\"'" || true); \
+	if [ -z "$$API_BASE" ]; then API_BASE="$${OPENAI_API_BASE:-https://api.openai.com/v1}"; fi; \
+	if [ -n "$$API_KEY" ]; then \
+		echo "Detected OPENAI_API_KEY. Creating/updating Kubernetes secret 'reasoner-llm-secret' in $(NAMESPACE_WORKLOAD)..."; \
+		kubectl create secret generic reasoner-llm-secret \
+			--namespace $(NAMESPACE_WORKLOAD) \
+			--from-literal=OPENAI_API_KEY="$$API_KEY" \
+			--from-literal=OPENAI_API_BASE="$$API_BASE" \
+			--dry-run=client -o yaml | kubectl apply -f - ; \
+	else \
+		echo "No OPENAI_API_KEY detected in .env or environment; deploying reasoner in deterministic heuristic fallback mode."; \
+	fi
 	@echo "Deploying reasoner service to cluster..."
 	kubectl apply -f k8s/reasoner-deployment.yaml
 	kubectl apply -f k8s/reasoner-service.yaml
@@ -208,7 +235,61 @@ verify-reasoner:
 # Alias for verify-reasoner
 reasoner-verify: verify-reasoner
 
+reasoner-port-forward:
+	@echo "Port-forwarding Reasoner service to http://localhost:8000..."
+	kubectl port-forward svc/reasoner-service -n $(NAMESPACE_WORKLOAD) 8000:8000
+
 reasoner-undeploy:
-	@echo "Cleaning up reasoner deployment and service..."
+	@echo "Cleaning up reasoner deployment, service, and credentials..."
 	-kubectl delete -f k8s/reasoner-service.yaml --ignore-not-found
 	-kubectl delete -f k8s/reasoner-deployment.yaml --ignore-not-found
+	-kubectl delete secret reasoner-llm-secret -n $(NAMESPACE_WORKLOAD) --ignore-not-found
+
+# ==============================================================================
+# 4. Model Context Protocol (MCP) Server Targets
+# ==============================================================================
+
+mcp-test:
+	@echo "Running MCP Server test suite..."
+	cd mcp-server && PYTHONPATH=. ../../venv/bin/pytest -v
+
+mcp-run:
+	@echo "Starting MCP Server locally on http://localhost:8001 (SSE Transport /sse)..."
+	cd mcp-server && PYTHONPATH=. ../../venv/bin/python main.py --transport sse --port 8001
+
+mcp-docker-build:
+	@echo "Building MCP Server Docker image..."
+	cd mcp-server && docker build -t $(MCP_IMG) .
+
+mcp-deploy: mcp-docker-build
+	@echo "Ensuring MCP Server image is available in local cluster..."
+	@which kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$" && \
+		(echo "Loading image $(MCP_IMG) into Kind cluster '$(KIND_CLUSTER_NAME)'..." && kind load docker-image $(MCP_IMG) --name $(KIND_CLUSTER_NAME)) || true
+	@echo "Deploying MCP Server RBAC, Deployment, and Service to cluster..."
+	kubectl apply -f k8s/mcp-server-rbac.yaml
+	kubectl apply -f k8s/mcp-server-deployment.yaml
+	kubectl apply -f k8s/mcp-server-service.yaml
+	@echo "Waiting for MCP Server deployment rollout to complete..."
+	kubectl rollout status deployment/mcp-server -n $(NAMESPACE_WORKLOAD) --timeout=90s
+	@echo "MCP Server successfully deployed in $(NAMESPACE_WORKLOAD) namespace."
+
+mcp-logs:
+	@echo "Streaming logs from MCP Server..."
+	kubectl logs -f deployment/mcp-server -n $(NAMESPACE_WORKLOAD)
+
+verify-mcp:
+	@chmod +x scripts/verify-mcp.sh
+	@./scripts/verify-mcp.sh http://localhost:8001
+
+# Alias for verify-mcp
+mcp-verify: verify-mcp
+
+mcp-port-forward:
+	@echo "Port-forwarding MCP Server to http://localhost:8001..."
+	kubectl port-forward svc/mcp-server -n $(NAMESPACE_WORKLOAD) 8001:8001
+
+mcp-undeploy:
+	@echo "Cleaning up MCP Server resources..."
+	-kubectl delete -f k8s/mcp-server-service.yaml --ignore-not-found
+	-kubectl delete -f k8s/mcp-server-deployment.yaml --ignore-not-found
+	-kubectl delete -f k8s/mcp-server-rbac.yaml --ignore-not-found

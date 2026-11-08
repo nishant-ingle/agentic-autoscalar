@@ -1,0 +1,375 @@
+Epic 4: Model Context Protocol (MCP) Server Integration — End-to-End Implementation 
+
+Epic 4 is implemented end-to-end. All Epic 4 artifacts and code reside strictly within the project/ directory, and a root-
+level symlink has been created at mcp-server pointing to project/mcp-server.
+──────
+## 1. What is the Model Context Protocol (MCP)?
+
+### 1.1 The Problem MCP Solves
+
+Traditionally, connecting Large Language Models (LLMs) or autonomous AI agents to real-world infrastructure (Kubernetes,
+databases, Prometheus) required custom, bespoke REST API wrappers and ad-hoc function-calling definitions.
+
+• Every developer invented their own JSON formatting, error conventions, and authentication logic.
+• Whenever tools changed, LLM prompt templates and client code had to be rewritten.
+• Security controls were fragmented, creating the risk that an LLM with function-calling capabilities might accidentally
+execute mutating actions (e.g. deleting pods or issuing kubectl exec).
+
+### 1.2 The Standard: Model Context Protocol (MCP)
+
+MCP (originated by Anthropic and standardized across modern agentic ecosystems) is an open protocol based on JSON-RPC 2.0
+that standardizes how AI applications discover, inspect, and invoke tools and data sources. Think of it as LSP (Language
+Server Protocol) for LLM tools and context:
+
+┌─────────────────────────────────┐                 ┌─────────────────────────────────┐
+│     AI Reasoner (MCP Client)    │                 │   K8s Telemetry (MCP Server)    │
+│  FastAPI / LangGraph / LangChain │                 │ Python Official 'mcp' SDK (v2)  │
+└────────────────┬────────────────┘                 └────────────────┬────────────────┘
+                    │                                                   │
+                    │ 1. GET /sse (Establish Event Stream)              │
+                    │──────────────────────────────────────────────────>│
+                    │                                                   │
+                    │ 2. POST /messages (JSON-RPC: 'initialize')        │
+                    │──────────────────────────────────────────────────>│
+                    │<──────────────────────────────────────────────────│ (Returns Server Info & Protocol Caps)
+                    │                                                   │
+                    │ 3. POST /messages (JSON-RPC: 'tools/list')        │
+                    │──────────────────────────────────────────────────>│
+                    │<──────────────────────────────────────────────────│ (Returns Dynamic JSON Schema of Tools)
+                    │                                                   │
+                    │ 4. POST /messages (JSON-RPC: 'tools/call')        │
+                    │    Tool: 'get_cluster_metrics'                    │
+                    │──────────────────────────────────────────────────>│
+                    │                                                   │ (Read-only K8s API query)
+                    │<──────────────────────────────────────────────────│ (Returns structured status & pods)
+                    │                                                   │
+
+### 1.3 Core Concepts of MCP
+
+1. Transports:
+    • SSE (Server-Sent Events): The client connects via HTTP GET /sse to receive server notifications and streaming
+    responses, while issuing JSON-RPC requests via HTTP POST /messages?session_id=.... This allows running the MCP server
+    as a microservice inside Kubernetes.
+    • Stdio: Standard input/output pipe for running locally in CI or via CLI subprocesses.
+2. Tools:
+Functions that the client discovers dynamically via tools/list and executes via tools/call. Each tool declares its
+arguments using strict standard JSON Schema.
+3. Security Boundary:
+The MCP server acts as an authorization boundary. Even if the AI agent requests a write action (e.g., scale, patch, delete),
+the MCP server intercepts and blocks it at the protocol layer before it ever touches cluster resources.
+──────
+## 2. Directory Layout & Root Symlink
+
+agentic_autoscalar/
+├── mcp-server -> project/mcp-server   <-- Workspace root symlink
+├── project/
+│   ├── k8s/
+│   │   ├── mcp-server-rbac.yaml       <-- Read-only ServiceAccount & ClusterRole
+│   │   ├── mcp-server-deployment.yaml <-- Kubernetes deployment on port 8001
+│   │   └── mcp-server-service.yaml    <-- ClusterIP service
+│   ├── mcp-server/
+│   │   ├── app/
+│   │   │   ├── __init__.py            <-- Package marker
+│   │   │   ├── config.py              <-- Pydantic BaseSettings configuration
+│   │   │   ├── k8s_client.py          <-- Read-only Kubernetes client
+│   │   │   ├── prom_client.py         <-- Asynchronous Prometheus query client
+│   │   │   ├── security.py            <-- Security boundary & prohibited verb checker
+│   │   │   └── server.py              <-- Official MCP Server instance & tools
+│   │   ├── tests/
+│   │   │   ├── conftest.py            <-- Pytest fixtures and mock isolation
+│   │   │   ├── test_client_integration.py <-- End-to-end SSE client protocol test
+│   │   │   ├── test_rest_endpoints.py <-- Healthz & info probes test
+│   │   │   ├── test_security_boundary.py <-- Verification that write ops are blocked
+│   │   │   ├── test_tool_execution.py <-- Unit test of each tool invocation
+│   │   │   └── test_tools_list.py     <-- Tool schema & discovery test
+│   │   ├── Dockerfile                 <-- Non-root container image
+│   │   ├── main.py                    <-- CLI entrypoint (SSE or Stdio)
+│   │   ├── pytest.ini                 <-- Pytest configuration
+│   │   └── requirements.txt           <-- Pinned dependencies
+│   ├── reasoner/
+│   │   ├── app/
+│   │   │   ├── services/
+│   │   │   │   └── mcp_client.py      <-- MCP Client layer for the AI Reasoner
+│   │   │   └── routers/
+│   │   │       └── scaling.py         <-- Added /mcp/tools & /evaluate-scaling-mcp
+│   │   └── tests/
+│   │       └── test_mcp_integration.py<-- Tests Reasoner-to-MCP integration
+│   ├── scripts/
+│   │   ├── verify-mcp.py              <-- Protocol acceptance verification test
+│   │   └── verify-mcp.sh              <-- Shell runner for verify-mcp
+│   └── Makefile                       <-- Comprehensive make targets
+──────
+## 3. Deep-Dive File Breakdown
+
+### A. The Core MCP Server (project/mcp-server/)
+
+#### 1. server.py
+
+• What it does: Initializes the official Python MCP SDK instance (mcp.server.mcpserver.MCPServer) and registers the tools
+using the @mcp_server.tool() decorator.
+• Registered Tools:
+    1. get_cluster_metrics(namespace, workload_name): Returns real-time desired vs. ready replica counts, pod lifecycle
+    phases, IPs, and restart counts.
+    2. query_prometheus_range(query, time_window_seconds, step): Issues a PromQL range query to Prometheus, computes
+    statistical aggregations (min, max, avg, latest), and returns sample points.
+    3. fetch_recent_logs(namespace, workload_name, tail_lines, container): Safely streams sanitized stdout/stderr log
+    entries from workload pods.
+    4. execute_cluster_action(action, target): Dedicated security guard tool. If called with any mutating action (e.g.
+    scale, delete), it halts and returns a structured WriteOperationForbidden security block.
+• REST Probes: Exports standard HTTP endpoints on the Starlette ASGI app:
+    • GET /healthz: Kubernetes liveness/readiness probe.
+    • GET /info: Returns server metadata and a list of all registered tools without needing an MCP client.
+
+
+#### 2. security.py
+
+• What it does: Enforces the security boundary mandated by Subtask 4:
+    • PROHIBITED_WRITE_VERBS: A set of forbidden mutation keywords (scale, patch, delete, create, exec, kill, update, etc.).
+    • enforce_read_only(operation): Scans requested operations with regex word-boundary checks. If any mutating verb is
+    detected, it raises SecurityViolationError.
+    • validate_namespace(namespace): Whitelists authorized namespaces (workload-system, default, monitoring), preventing
+    path traversal (../) or inspection of cluster internals (kube-system).
+    • sanitize_tail_lines(tail_lines): Caps log lines between 1 and 200 to prevent buffer overflow/DoS.
+
+
+#### 3. k8s_client.py
+
+• What it does: The Kubernetes cluster interface.
+    • Automatically handles dual-environment loading: attempts config.load_incluster_config() first (when running as a pod
+    in Kubernetes), and falls back to config.load_kube_config() (when running locally against Kind).
+    • Implements strictly read-only methods (read_namespaced_deployment, list_namespaced_pod, read_namespaced_pod_log).
+
+
+#### 4. prom_client.py
+
+• What it does: Asynchronous Prometheus HTTP client using httpx.
+    • Connects to http://prometheus-server.monitoring.svc.cluster.local:80 (in-cluster) or http://localhost:9090 (locally).
+    • Handles /api/v1/query_range, parsing timeseries arrays and aggregating statistics for the agent.
+
+
+#### 5. config.py
+
+• What it does: Environment configuration backed by pydantic-settings. Configures default ports (8001), server name (k8s-
+metrics-mcp-server), Prometheus base URL, and allowed namespaces.
+
+#### 6. main.py
+
+• What it does: CLI entrypoint. Supports:
+    • --transport sse (default): Starts Uvicorn ASGI server on port 8001 exposing /sse and /messages.
+    • --transport stdio: Starts stdio event loop for direct pipe usage.
+
+──────
+### B. The AI Reasoner MCP Client (project/reasoner/)
+
+#### 1. mcp_client.py
+
+• What it does: Integrates the Reasoner as an MCP client.
+    • Uses mcp.client.sse.sse_client and ClientSession.
+    • list_available_tools(): Discovers tools directly from the MCP Server over the network.
+    • call_tool(tool_name, arguments): Invokes tools via JSON-RPC over SSE.
+    • get_cluster_telemetry() & fetch_pod_logs(): Convenience helper methods.
+
+
+#### 2. scaling.py
+
+• What it does: Exposes two new routes:
+    • GET /mcp/tools: Lets developers/operators inspect discovered MCP tools from the Reasoner.
+    • POST /evaluate-scaling-mcp: Queries live cluster metrics and recent logs via MCP to enrich the telemetry payload
+    before invoking the LangGraph reasoning engine.
+
+──────
+### C. Kubernetes Manifests (project/k8s/)
+
+1. mcp-server-rbac.yaml: Creates ServiceAccount mcp-server-sa and ClusterRole mcp-server-reader. Grants strictly read-only
+access (get, list, watch on pods, logs, deployments, services). Mutating verbs (create, update, patch, delete) are
+completely omitted.
+2. mcp-server-deployment.yaml: Runs mcp-server:latest non-root (UID 10001) in workload-system with resource limits and
+probes.
+3. mcp-server-service.yaml: Exposes port 8001 as svc/mcp-server.
+──────
+## 4. How to Run and Test Locally
+
+### 4.1 Running Automated Unit & Protocol Tests
+
+To run the 13 automated tests (tool discovery, tool execution, security boundary tests, REST probes, and end-to-end SSE
+client handshake):
+
+make mcp-test
+
+(Result: 13 passed)
+
+To run the reasoner test suite (including the new MCP client integration tests):
+
+make reasoner-test
+
+(Result: 12 passed)
+
+### 4.2 Running the MCP Server Locally
+
+To start the MCP Server on port 8001:
+
+make mcp-run
+
+Output:
+
+Starting MCP Server on http://0.0.0.0:8001 (SSE Transport: /sse, Info: /info, Health: /healthz)...
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+
+In a second terminal, verify tool discovery via HTTP:
+
+curl -s http://localhost:8001/info | jq
+──────
+## 5. How to Run and Verify in the Kubernetes Cluster
+
+### 5.1 Deploying into the Cluster
+
+This builds the Docker image, automatically loads it into your Kind cluster (desktop), applies the RBAC and Deployment
+manifests, and waits for rollout:
+
+make mcp-deploy
+
+### 5.2 Checking Pod Logs
+
+make mcp-logs
+
+### 5.3 Running the Acceptance Verification Script
+
+To test the in-cluster deployment against the official Acceptance Criteria:
+
+# Terminal 1: Port-forward the in-cluster MCP server
+make mcp-port-forward
+
+# Terminal 2: Run the automated acceptance test
+make verify-mcp
+
+#####################################################################################
+
+You are spot on.
+
+In the Model Context Protocol (MCP) specification and the official SDK (v2.x+), the legacy HTTP+SSE transport has been
+formally deprecated in favor of Streamable HTTP (streamable_http).
+──────
+### 1. Why is HTTP+SSE Outdated?
+
+The original MCP remote transport combined standard Server-Sent Events (SSE) with an HTTP POST endpoint, which created
+major architectural problems in production environments:
+
+Limitation                  │ Legacy HTTP+SSE Transport (Deprecated)   │ Modern Streamable HTTP (/mcp) (Current Standard)
+─────────────────────────────┼──────────────────────────────────────────┼──────────────────────────────────────────────────
+Endpoint Topology           │ Two separate endpoints (GET /sse for     │ A single unified endpoint (/mcp) handling both
+                            │ listening and POST /messages for         │ POST and GET.
+                            │ sending).                                │
+Connection Model            │ Persistent, stateful streaming           │ Standard HTTP request/response lifecycle with
+                            │ connection. The client must keep a long- │ optional streaming (chunked transfer).
+                            │ lived GET /sse connection open           │
+                            │ continuously.                            │
+Cloud & Ingress Reliability │ Fragile. Kubernetes Ingresses            │ Rock solid. Follows standard HTTP
+                            │ (NGINX/Traefik), AWS ALBs, Cloudflare,   │ request/response routing; no idle streaming pipe
+                            │ and corporate proxies routinely drop or  │ to break.
+                            │ timeout idle streaming SSE pipes.        │
+Authentication Security     │ Leaked tokens. Standard browser          │ Secure headers. Uses standard Authorization:
+                            │ EventSource cannot send custom headers,  │ Bearer <token> HTTP headers on POST requests.
+                            │ forcing auth tokens into the URL query   │
+                            │ string (/sse?token=xyz), which leaks     │
+                            │ secrets into access logs.                │
+Horizontal Scalability      │ Difficult. Requires sticky sessions      │ Stateless-friendly. Any pod in the cluster can
+                            │ because the persistent GET /sse          │ handle any incoming MCP tool call.
+                            │ connection is tied to one specific pod.  │
+──────
+### 2. Upgraded Implementation: Modern Streamable HTTP as Primary
+
+The server and client have been upgraded to use Streamable HTTP as the primary modern protocol (/mcp) while maintaining
+dual backward compatibility for legacy clients (/sse):
+
+                                    ┌──────────────────────────────────────────────┐
+                                    │               MCP Server (8001)              │
+                                    │                                              │
+┌─────────────────────────────────┐ │ ┌──────────────────────────────────────────┐ │
+│   Reasoner (FastAPI / Agent)    │─┼─│ Modern Endpoint: /mcp                   │ │
+│   (Using streamable_http_client)│ │ │ (Single-endpoint Request/Streaming Body) │ │
+└─────────────────────────────────┘ │ └──────────────────────────────────────────┘ │
+                                    │ ┌──────────────────────────────────────────┐ │
+┌─────────────────────────────────┐ │ │ Legacy Endpoint: /sse & /messages       │ │
+│   Legacy MCP Clients            │─┼─│ (Backward-compatible fallback)          │ │
+│   (Using sse_client)            │ │ └──────────────────────────────────────────┘ │
+└─────────────────────────────────┘ └──────────────────────────────────────────────┘
+
+#### What Changed in the Code:
+
+1. Server Architecture (server.py):
+    • Initialized both mcp_server.streamable_http_app() and mcp_server.sse_app().
+    • Combined them into a unified Starlette ASGI application:
+        • /mcp: Primary modern Streamable HTTP endpoint.
+        • /sse & /messages: Legacy SSE transport.
+        • /healthz & /info: REST observability probes.
+
+2. Reasoner MCP Client (mcp_client.py):
+    • Defaults to streamable_http_client("http://localhost:8001/mcp").
+    • Automatically detects the URL scheme: if an older /sse URL is passed, it falls back to sse_client seamlessly.
+3. Acceptance Verification (verify-mcp.py):
+    • Validates Check 2 & 3 directly over streamable_http_client on /mcp.
+    • Validates Check 5 to ensure the legacy /sse endpoint remains operational for older tooling.
+4. Integration Test Suite (test_client_integration.py):
+    • Tests both test_end_to_end_mcp_client_streamable_http and test_end_to_end_mcp_client_legacy_sse.
+
+──────
+### 3. Verification & Live Status
+
+Both test suites and the live in-cluster container have been rebuilt and re-verified:
+
+#### MCP Server Test Suite (14 Tests):
+
+make mcp-test
+
+tests/test_client_integration.py::test_end_to_end_mcp_client_streamable_http PASSED [  7%]
+tests/test_client_integration.py::test_end_to_end_mcp_client_legacy_sse PASSED      [ 14%]
+tests/test_rest_endpoints.py::test_healthz_endpoint PASSED                          [ 21%]
+tests/test_rest_endpoints.py::test_info_endpoint PASSED                             [ 28%]
+tests/test_security_boundary.py::test_enforce_read_only_blocks_mutations PASSED    [ 35%]
+tests/test_security_boundary.py::test_enforce_read_only_permits_reads PASSED        [ 42%]
+tests/test_security_boundary.py::test_namespace_validation_restricts_unauthorized_probes PASSED [ 50%]
+tests/test_security_boundary.py::test_sanitize_tail_lines PASSED                    [ 57%]
+tests/test_security_boundary.py::test_mcp_execute_cluster_action_tool_blocks_write PASSED [ 64%]
+tests/test_tool_execution.py::test_call_get_cluster_metrics PASSED                  [ 71%]
+tests/test_tool_execution.py::test_call_query_prometheus_range PASSED               [ 78%]
+tests/test_tool_execution.py::test_call_fetch_recent_logs PASSED                    [ 85%]
+tests/test_tools_list.py::test_tools_list_registration PASSED                       [ 92%]
+tests/test_tools_list.py::test_tools_schema_definitions PASSED                      [100%]
+
+======================= 14 passed in 1.88s =======================
+
+#### Live In-Cluster Protocol Verification (make verify-mcp):
+
+==========================================================
+    [Acceptance Verification] Checking Epic 4 MCP Server Layer
+    MCP Server URL: http://localhost:8001
+    Modern Streamable HTTP Endpoint: http://localhost:8001/mcp
+    Legacy SSE Endpoint:            http://localhost:8001/sse
+==========================================================
+
+[Check 1/5] Verifying REST Health & Info Endpoints...
+✔ Health probe passed: status=UP, transports={'primary': 'StreamableHTTP (/mcp)', 'legacy': 'SSE (/sse)'}
+✔ Info probe passed: primary=StreamableHTTP, registered tools=4
+
+[Check 2/5] Verifying Modern Streamable HTTP Handshake & Tool Discovery (tools/list)...
+✔ Streamable HTTP initialized: server='k8s-metrics-mcp-server', version='1.0.0'
+✔ Discovered tools (4): ['get_cluster_metrics', 'query_prometheus_range', 'fetch_recent_logs', 'execute_cluster_action']
+✔ All required MCP tool definitions successfully registered.
+
+[Check 3/5] Verifying Modern Streamable HTTP Tool Execution (tools/call)...
+✔ Tool 'get_cluster_metrics' executed successfully:
+    Status: success | Ready Replicas: 2 | Pods: 2
+✔ Tool 'fetch_recent_logs' executed successfully:
+    Status: success | Pods Sampled: 2
+
+[Check 4/5] Verifying Strict Read-Only Security Boundary Enforcement...
+✔ Security boundary successfully blocked prohibited write operation:
+    Reason: WriteOperationForbidden: MCP server enforces strict read-only security.
+
+[Check 5/5] Verifying Legacy SSE Transport Backward Compatibility (/sse)...
+✔ Legacy SSE initialized: server='k8s-metrics-mcp-server'
+✔ Legacy SSE tool listing confirmed (4 tools)
+
+==========================================================
+    ALL EPIC 4 ACCEPTANCE CRITERIA SUCCESSFULLY VERIFIED! ✔
+    (Modern Streamable HTTP & Legacy SSE Both Operational)   

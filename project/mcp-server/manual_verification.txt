@@ -1,0 +1,231 @@
+
+Here is a step-by-step guide to manually test and verify the in-cluster MCP Server (Epic 4) alongside the services from
+Epics 1, 2, and 3.
+──────
+### Step 0: Ensure All Pods Are Running & Open Port-Forwards
+Check cluster status:
+kubectl get pods -A
+Ensure pods are Running in workload-system, operator-system, and monitoring.
+In one terminal, open the port-forward tunnels:
+
+# Workload (8080), Prometheus (9090), Reasoner (8000), MCP Server (8001)
+kubectl port-forward svc/target-workload -n workload-system 8080:8080 & \
+kubectl port-forward svc/prometheus-server -n monitoring 9090:80 & \
+kubectl port-forward svc/reasoner-service -n workload-system 8000:8000 & \
+kubectl port-forward svc/mcp-server -n workload-system 8001:8001 & \
+wait
+──────
+### Step 1: Verify MCP Server Probes & Registered Tools via HTTP
+
+The MCP Server exposes standard HTTP inspection endpoints.
+#### 1.1 Health Probe:
+
+curl -s http://localhost:8001/healthz | jq
+Expected Output:
+
+{
+    "status": "UP",
+    "service": "k8s-metrics-mcp-server",
+    "version": "1.0.0",
+    "transports": {
+    "primary": "StreamableHTTP (/mcp)",
+    "legacy": "SSE (/sse)"
+    }
+}
+
+#### 1.2 Tool Catalog Inspection:
+curl -s http://localhost:8001/info | jq '.tools[] | {name: .name, description: .description}'
+
+Expected Output:
+
+{
+    "name": "get_cluster_metrics",
+    "description": "Retrieves live Kubernetes workload metrics..."
+}
+{
+    "name": "query_prometheus_range",
+    "description": "Queries Prometheus timeseries telemetry..."
+}
+{
+    "name": "fetch_recent_logs",
+    "description": "Fetches recent stdout/stderr log entries..."
+}
+{
+    "name": "execute_cluster_action",
+    "description": "Security guard tool..."
+}
+──────
+### Step 2: Manually Call MCP Tools via Modern Streamable HTTP
+
+Run these one-line Python commands from your terminal (which use the active venv/bin/python MCP client) to invoke each tool
+manually over the protocol.
+
+#### 2.1 Tool 1: Inspect Live Cluster Metrics (get_cluster_metrics)
+
+Queries the Kubernetes API directly through the MCP Server:
+./venv/bin/python -c "
+import asyncio
+from mcp.client.streamable_http import streamable_http_client
+from mcp.client.session import ClientSession
+
+async def main():
+    async with streamable_http_client('http://localhost:8001/mcp') as (r, w):
+        async with ClientSession(r, w) as sess:
+            await sess.initialize()
+            res = await sess.call_tool('get_cluster_metrics', {
+                'namespace': 'workload-system',
+                'workload_name': 'target-workload'
+            })
+            print(res.content[0].text)
+
+asyncio.run(main())
+" | jq
+
+Expected Output: Live replica counts (ready_replicas: 2, available_replicas: 2) and real pod names from your Kind cluster.
+──────
+#### 2.2 Tool 2: Query Prometheus Range Telemetry (query_prometheus_range)
+
+Queries the in-cluster Prometheus scraper through the MCP Server:
+
+./venv/bin/python -c "
+import asyncio
+from mcp.client.streamable_http import streamable_http_client
+from mcp.client.session import ClientSession
+
+async def main():
+    async with streamable_http_client('http://localhost:8001/mcp') as (r, w):
+        async with ClientSession(r, w) as sess:
+            await sess.initialize()
+            res = await sess.call_tool('query_prometheus_range', {
+                'query': 'workload_http_requests_total',
+                'time_window_seconds': 300,
+                'step': '15s'
+            })
+            print(res.content[0].text)
+
+asyncio.run(main())
+" | jq
+Expected Output: Statistical aggregation (min, max, avg, latest) and timeseries samples recorded by Prometheus from the
+Epic 1 Gin microservice.
+──────
+#### 2.3 Tool 3: Fetch Workload Pod Logs (fetch_recent_logs)
+
+Safely reads stdout logs from the target workload pods without running kubectl:
+./venv/bin/python -c "
+import asyncio
+from mcp.client.streamable_http import streamable_http_client
+from mcp.client.session import ClientSession
+
+async def main():
+    async with streamable_http_client('http://localhost:8001/mcp') as (r, w):
+        async with ClientSession(r, w) as sess:
+            await sess.initialize()
+            res = await sess.call_tool('fetch_recent_logs', {
+                'namespace': 'workload-system',
+                'workload_name': 'target-workload',
+                'tail_lines': 5
+            })
+            print(res.content[0].text)
+
+asyncio.run(main())
+" | jq
+
+Expected Output: The latest HTTP request logs from the Gin target microservice.
+──────
+#### 2.4 Tool 4: Test Security Boundary Enforcement (execute_cluster_action)
+Attempts an unauthorized mutating cluster action (scale_deployment) to confirm it is blocked at the protocol layer:
+./venv/bin/python -c "
+import asyncio
+from mcp.client.streamable_http import streamable_http_client
+from mcp.client.session import ClientSession
+
+async def main():
+    async with streamable_http_client('http://localhost:8001/mcp') as (r, w):
+        async with ClientSession(r, w) as sess:
+            await sess.initialize()
+            res = await sess.call_tool('execute_cluster_action', {
+                'action': 'scale_deployment_to_50',
+                'target': 'target-workload'
+            })
+            print(res.content[0].text)
+
+asyncio.run(main())
+" | jq
+
+Expected Output:
+{
+    "status": "blocked",
+    "is_forbidden": true,
+    "security_error": "WriteOperationForbidden: MCP server enforces strict read-only security. Operation
+    'scale_deployment_to_50' containing prohibited action 'scale' was rejected."
+}
+──────
+### Step 3: Verify End-to-End Integration Across Epics 1, 2, 3, & 4
+This test verifies the entire pipeline:
+• Epic 1: Synthetic traffic is sent to the target Gin microservice.
+• Epic 4: The MCP Server observes the cluster state and Prometheus telemetry.
+• Epic 3: The Reasoner uses MCP to enrich its telemetry and compute a scaling recommendation.
+• Epic 2: The Operator manages the target workload replicas based on system limits.
+
+#### 3.1 Generate Traffic Spike on Workload (Epic 1):
+
+curl -s "http://localhost:8080/api/load/cpu?duration_ms=800&concurrency=3" > /dev/null
+curl -s "http://localhost:8080/api/workload?rounds=25000&delay_ms=10" > /dev/null
+#### 3.2 Verify the Reasoner Discovers MCP Tools (Epic 3 ➔ Epic 4):
+Ask the Reasoner to query the MCP server and list its available tools:
+curl -s http://localhost:8000/mcp/tools | jq
+Expected Output:
+{
+    "mcp_server_url": "http://mcp-server.workload-system.svc.cluster.local:8001/mcp",
+    "tools_discovered_count": 4,
+    "tools": [
+    {"name": "get_cluster_metrics"},
+    {"name": "query_prometheus_range"},
+    {"name": "fetch_recent_logs"},
+    {"name": "execute_cluster_action"}
+    ]
+}
+#### 3.3 Trigger MCP-Enriched Scaling Evaluation (Epic 3 ➔ Epic 4):
+Send a telemetry payload to the Reasoner's MCP-enriched scaling endpoint:
+
+curl -s -X POST http://localhost:8000/evaluate-scaling-mcp \
+    -H "Content-Type: application/json" \
+    -d '{
+    "workload_name": "target-workload",
+    "namespace": "workload-system",
+    "current_replicas": 2,
+    "min_replicas": 1,
+    "max_replicas": 5,
+    "cpu_utilization_percent": 88.0,
+    "memory_utilization_percent": 50.0,
+    "http_requests_per_second": 250.0,
+    "http_p99_latency_ms": 310.0,
+    "error_rate_percent": 0.0
+    }' | jq
+
+Expected Output:
+
+{
+    "workload_name": "target-workload",
+    "namespace": "workload-system",
+    "current_replicas": 2,
+    "target_replicas": 3,
+    "action": "SCALE_UP",
+    "reasoning": "[Enriched via MCP Server] The observed CPU utilization is at 88.0%, which exceeds the target CPU utilization of 65.0%. Additionally, the P99 latency is at 310.0ms, indicating that the workload is experiencing performance degradation. Scaling up to 3 replicas will help distribute the load more effectively and reduce CPU utilization, thereby improving response times and maintaining a better user experience. The decision to scale up is further supported by the high urgency indicated in the pre-analysis, which highlights the need for immediate action to prevent further degradation.",
+    "confidence_score": 0.95,
+    "primary_metric_driver": "CPU_UTILIZATION",
+    "is_fallback": false,
+    "model_used": "gpt-4o-mini",
+    "timestamp": "2023-10-10T12:00:00Z"
+}
+
+#### 3.4 Verify the Operator and CRD (Epic 2):
+
+Check that the AgenticAutoscaler Custom Resource Definition and sample instance are active:
+
+kubectl get agenticautoscalers -A
+
+Expected Output:
+
+NAMESPACE         NAME                     TARGET DEPLOYMENT   MIN   MAX   DESIRED
+workload-system   agenticautoscaler-sample target-workload     1     5     2
