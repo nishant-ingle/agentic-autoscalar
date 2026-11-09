@@ -62,9 +62,26 @@ type AgenticAutoscalerSpec struct {
 	// +optional
 	CooldownPeriodSeconds *int32 `json:"cooldownPeriodSeconds,omitempty"`
 
+	// ScaleDownHysteresisSeconds defines the cool-down window (in seconds) rejecting scale-downs after a prior scale-up.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=600
+	// +optional
+	ScaleDownHysteresisSeconds *int32 `json:"scaleDownHysteresisSeconds,omitempty"`
+
+	// TargetCPUUtilization is the target CPU percentage used for standard reactive HPA fallback calculations.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=70
+	// +optional
+	TargetCPUUtilization *int32 `json:"targetCPUUtilization,omitempty"`
+
 	// ReasonerURL is the endpoint of the external reasoning engine (e.g., FastAPI / LangGraph service).
 	// +optional
 	ReasonerURL string `json:"reasonerURL,omitempty"`
+
+	// PrometheusURL is the optional endpoint of the Prometheus server to query live metrics.
+	// +optional
+	PrometheusURL string `json:"prometheusURL,omitempty"`
 }
 
 // AgenticAutoscalerStatus defines the observed state of AgenticAutoscaler
@@ -84,6 +101,30 @@ type AgenticAutoscalerStatus struct {
 	// LastScaleTime is the last time the AgenticAutoscaler scaled the target resource.
 	// +optional
 	LastScaleTime *metav1.Time `json:"lastScaleTime,omitempty"`
+
+	// LastScaleUpTime is the last time the AgenticAutoscaler scaled up the target resource.
+	// +optional
+	LastScaleUpTime *metav1.Time `json:"lastScaleUpTime,omitempty"`
+
+	// LastScaleDownTime is the last time the AgenticAutoscaler scaled down the target resource.
+	// +optional
+	LastScaleDownTime *metav1.Time `json:"lastScaleDownTime,omitempty"`
+
+	// LastScaleAction records the most recent scaling action executed (SCALE_UP, SCALE_DOWN, MAINTAIN).
+	// +optional
+	LastScaleAction string `json:"lastScaleAction,omitempty"`
+
+	// LastGuardrailAction describes any guardrail enforcement taken during the latest cycle (e.g. ACCEPTED, CLAMPED, REJECTED).
+	// +optional
+	LastGuardrailAction string `json:"lastGuardrailAction,omitempty"`
+
+	// LastGuardrailReason explains why a guardrail was triggered or why scaling was rejected/clamped.
+	// +optional
+	LastGuardrailReason string `json:"lastGuardrailReason,omitempty"`
+
+	// FallbackEngaged indicates whether the controller engaged fallback reactive HPA behavior.
+	// +optional
+	FallbackEngaged bool `json:"fallbackEngaged"`
 
 	// LastReconcileTime is the last time the target deployment was inspected by the reconciler.
 	// +optional
@@ -108,6 +149,8 @@ type AgenticAutoscalerStatus struct {
 // +kubebuilder:printcolumn:name="Max",type="integer",JSONPath=".spec.maxReplicas",description="Max replicas"
 // +kubebuilder:printcolumn:name="Current",type="integer",JSONPath=".status.currentReplicas",description="Current replicas"
 // +kubebuilder:printcolumn:name="Desired",type="integer",JSONPath=".status.desiredReplicas",description="Desired replicas"
+// +kubebuilder:printcolumn:name="Action",type="string",JSONPath=".status.lastScaleAction",description="Last scale action"
+// +kubebuilder:printcolumn:name="Fallback",type="boolean",JSONPath=".status.fallbackEngaged",description="Fallback engaged"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // AgenticAutoscaler is the Schema for the agenticautoscalers API

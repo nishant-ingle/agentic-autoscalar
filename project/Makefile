@@ -3,7 +3,8 @@
 	operator-manifests operator-generate operator-test operator-build operator-docker-build operator-install operator-run operator-deploy operator-logs operator-apply-sample operator-verify verify-operator operator-undeploy \
 	reasoner-test reasoner-run reasoner-docker-build reasoner-deploy reasoner-logs reasoner-verify verify-reasoner reasoner-port-forward reasoner-undeploy \
 	mcp-test mcp-run mcp-docker-build mcp-deploy mcp-logs mcp-verify verify-mcp mcp-port-forward mcp-undeploy \
-	rag-test rag-seed rag-docker-build rag-deploy rag-logs rag-verify verify-rag rag-clean-db rag-port-forward rag-undeploy
+	rag-test rag-seed rag-docker-build rag-deploy rag-logs rag-verify verify-rag rag-clean-db rag-port-forward rag-undeploy \
+	guardrails-test operator-guardrails-test verify-guardrails guardrails-verify epic6-verify
 
 NAMESPACE_WORKLOAD := workload-system
 NAMESPACE_MONITORING := monitoring
@@ -75,6 +76,10 @@ help:
 	@echo "  make rag-clean-db          Truncate and reset rag_documents table in local database"
 	@echo "  make rag-port-forward      Port-forward in-cluster PostgreSQL (pgvector) to localhost:5432"
 	@echo "  make rag-undeploy          Delete RAG seeding Job and ConfigMap from cluster"
+	@echo ""
+	@echo "Deterministic Guardrails & Safety Barrier (Epic 6 - Go Controller):"
+	@echo "  make guardrails-test       (or make operator-guardrails-test) Run guardrails and reasoner unit tests"
+	@echo "  make verify-guardrails     (or make guardrails-verify, epic6-verify) Run Epic 6 acceptance verification"
 	@echo "================================================================================"
 
 # ==============================================================================
@@ -395,4 +400,22 @@ rag-undeploy:
 	@echo "Deleting RAG Job, ConfigMap, and in-cluster PostgreSQL deployment..."
 	-kubectl delete -f rag/k8s/rag-syn-job.yaml --ignore-not-found
 	-kubectl delete -f k8s/postgres-deployment.yaml --ignore-not-found
+
+# ==============================================================================
+# 6. Deterministic Guardrails & Safety Barrier (Epic 6 - Go Controller Pipeline)
+# ==============================================================================
+
+guardrails-test:
+	@echo "Running Epic 6 deterministic guardrails and reasoner test suites..."
+	cd operator && go test -v ./internal/guardrails/... ./internal/reasoner/...
+
+operator-guardrails-test: guardrails-test
+
+verify-guardrails:
+	@chmod +x scripts/verify-guardrails.sh
+	@./scripts/verify-guardrails.sh
+
+guardrails-verify: verify-guardrails
+epic6-verify: verify-guardrails
+
 

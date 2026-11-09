@@ -189,9 +189,9 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 #### **Acceptance Criteria:**
 
-* [ ] Controller successfully rejects replica recommendations exceeding `maxReplicas`.
-* [ ] Cooldown window prevents rapid oscillation (flapping) under fluctuating mock loads.
-* [ ] System safely defaults to fallback behavior during simulated reasoning service outages.
+* [x] Controller successfully rejects replica recommendations exceeding `maxReplicas`.
+* [x] Cooldown window prevents rapid oscillation (flapping) under fluctuating mock loads.
+* [x] System safely defaults to fallback behavior during simulated reasoning service outages.
 
 ---
 

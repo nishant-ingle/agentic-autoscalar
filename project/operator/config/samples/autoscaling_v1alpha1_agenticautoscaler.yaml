@@ -15,4 +15,6 @@ spec:
   maxReplicas: 5
   pollingIntervalSeconds: 15
   cooldownPeriodSeconds: 60
+  scaleDownHysteresisSeconds: 600
+  targetCPUUtilization: 70
   reasonerURL: "http://reasoner-service.workload-system.svc.cluster.local:8000/evaluate-scaling"

@@ -38,6 +38,14 @@ spec:
       jsonPath: .status.desiredReplicas
       name: Desired
       type: integer
+    - description: Last scale action
+      jsonPath: .status.lastScaleAction
+      name: Action
+      type: string
+    - description: Fallback engaged
+      jsonPath: .status.fallbackEngaged
+      name: Fallback
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -93,10 +101,21 @@ spec:
                 format: int32
                 minimum: 1
                 type: integer
+              prometheusURL:
+                description: PrometheusURL is the optional endpoint of the Prometheus
+                  server to query live metrics.
+                type: string
               reasonerURL:
                 description: ReasonerURL is the endpoint of the external reasoning
                   engine (e.g., FastAPI / LangGraph service).
                 type: string
+              scaleDownHysteresisSeconds:
+                default: 600
+                description: ScaleDownHysteresisSeconds defines the cool-down window
+                  (in seconds) rejecting scale-downs after a prior scale-up.
+                format: int32
+                minimum: 0
+                type: integer
               scaleTargetRef:
                 description: ScaleTargetRef points to the target resource to scale
                   (e.g. Deployment)
@@ -116,6 +135,14 @@ spec:
                 - kind
                 - name
                 type: object
+              targetCPUUtilization:
+                default: 70
+                description: TargetCPUUtilization is the target CPU percentage used
+                  for standard reactive HPA fallback calculations.
+                format: int32
+                maximum: 100
+                minimum: 1
+                type: integer
             required:
             - maxReplicas
             - scaleTargetRef
@@ -194,14 +221,40 @@ spec:
                   pods calculated by the autoscaler.
                 format: int32
                 type: integer
+              fallbackEngaged:
+                description: FallbackEngaged indicates whether the controller engaged
+                  fallback reactive HPA behavior.
+                type: boolean
+              lastGuardrailAction:
+                description: LastGuardrailAction describes any guardrail enforcement
+                  taken during the latest cycle (e.g. ACCEPTED, CLAMPED, REJECTED).
+                type: string
+              lastGuardrailReason:
+                description: LastGuardrailReason explains why a guardrail was triggered
+                  or why scaling was rejected/clamped.
+                type: string
               lastReconcileTime:
                 description: LastReconcileTime is the last time the target deployment
                   was inspected by the reconciler.
                 format: date-time
                 type: string
+              lastScaleAction:
+                description: LastScaleAction records the most recent scaling action
+                  executed (SCALE_UP, SCALE_DOWN, MAINTAIN).
+                type: string
+              lastScaleDownTime:
+                description: LastScaleDownTime is the last time the AgenticAutoscaler
+                  scaled down the target resource.
+                format: date-time
+                type: string
               lastScaleTime:
                 description: LastScaleTime is the last time the AgenticAutoscaler
                   scaled the target resource.
+                format: date-time
+                type: string
+              lastScaleUpTime:
+                description: LastScaleUpTime is the last time the AgenticAutoscaler
+                  scaled up the target resource.
                 format: date-time
                 type: string
               observedGeneration:

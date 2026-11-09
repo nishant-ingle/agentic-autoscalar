@@ -123,13 +123,23 @@
 			# 4. Optional: Clean/reset vector table in local database
 			make rag-clean-db
 
+	[t6: deterministic guardrails & safety barrier (go controller pipeline)]
+		local-test:
+			# 1. Run the guardrails & reasoner unit test suites (21 specs)
+			make guardrails-test
 
-Stage          │ Target Microservice … │ Kubernetes Operator (oper… │ AI Reasoner Layer (reasone… │ MCP Server (mcp-*)    │ Operational RAG (rag-*)
-───────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────┼───────────────────────┼────────────────────────────
-Test           │ N/A                   │ make operator-verify       │ make reasoner-test          │ make mcp-test         │ make rag-test
-Build Docker   │ make app-docker-build │ make operator-docker-build │ make reasoner-docker-build  │ make mcp-docker-build │ make rag-docker-build
-Run Local      │ N/A                   │ make operator-run          │ make reasoner-run           │ make mcp-run          │ make rag-seed
-Deploy Cluster │ make app-deploy       │ make operator-deploy       │ make reasoner-deploy        │ make mcp-deploy       │ make rag-deploy
-Stream Logs    │ make app-logs         │ make operator-logs         │ make reasoner-logs          │ make mcp-logs         │ make rag-logs
-Verify / Test  │ make app-test-traffic │ make operator-verify       │ make reasoner-verify        │ make verify-mcp       │ make rag-verify
-Undeploy       │ make app-undeploy     │ make operator-undeploy     │ make reasoner-undeploy      │ make mcp-undeploy     │ make rag-undeploy
+			# 2. Run the operator controller test suite (including envtest integration tests)
+			make operator-test
+
+			# 3. Run the automated Epic 6 acceptance verification script
+			make verify-guardrails
+
+Stage          │ Target Microservice … │ Kubernetes Operator (oper… │ AI Reasoner Layer (reasone… │ MCP Server (mcp-*)    │ Operational RAG (rag-*)    │ Safety Guardrails (guardrails-*)
+───────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────────
+Test           │ N/A                   │ make operator-verify       │ make reasoner-test          │ make mcp-test         │ make rag-test              │ make guardrails-test
+Build Docker   │ make app-docker-build │ make operator-docker-build │ make reasoner-docker-build  │ make mcp-docker-build │ make rag-docker-build      │ make operator-docker-build
+Run Local      │ N/A                   │ make operator-run          │ make reasoner-run           │ make mcp-run          │ make rag-seed              │ make operator-run
+Deploy Cluster │ make app-deploy       │ make operator-deploy       │ make reasoner-deploy        │ make mcp-deploy       │ make rag-deploy            │ make operator-deploy
+Stream Logs    │ make app-logs         │ make operator-logs         │ make reasoner-logs          │ make mcp-logs         │ make rag-logs              │ make operator-logs
+Verify / Test  │ make app-test-traffic │ make operator-verify       │ make reasoner-verify        │ make verify-mcp       │ make rag-verify            │ make verify-guardrails
+Undeploy       │ make app-undeploy     │ make operator-undeploy     │ make reasoner-undeploy      │ make mcp-undeploy     │ make rag-undeploy          │ make operator-undeploy

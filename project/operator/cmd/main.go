@@ -145,8 +145,9 @@ func main() {
 	}
 
 	if err = (&controller.AgenticAutoscalerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("agentic-autoscaler-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AgenticAutoscaler")
 		os.Exit(1)

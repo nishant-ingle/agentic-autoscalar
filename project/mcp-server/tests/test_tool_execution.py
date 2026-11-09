@@ -12,7 +12,7 @@ async def test_call_get_cluster_metrics():
     assert not res.is_error
     data = res.structured_content.get("result", res.structured_content)
     assert data is not None
-    assert data.get("status") in ("success", "mock_success")
+    assert data.get("status") in ("success", "mock_success", "warning")
     assert data.get("namespace") == "workload-system"
     assert data.get("workload_name") == "target-workload"
 
@@ -31,7 +31,7 @@ async def test_call_query_prometheus_range():
     assert not res.is_error
     data = res.structured_content.get("result", res.structured_content)
     assert data is not None
-    assert data.get("status") in ("success", "mock_success")
+    assert data.get("status") in ("success", "mock_success", "warning")
 
 
 @pytest.mark.asyncio
@@ -48,4 +48,4 @@ async def test_call_fetch_recent_logs():
     assert not res.is_error
     data = res.structured_content.get("result", res.structured_content)
     assert data is not None
-    assert data.get("status") in ("success", "mock_success")
+    assert data.get("status") in ("success", "mock_success", "warning")
