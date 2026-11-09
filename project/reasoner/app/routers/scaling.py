@@ -25,6 +25,7 @@ async def evaluate_scaling(payload: ClusterMetricsPayload) -> ScalingRecommendat
             "target_cpu": settings.target_cpu_percent,
             "latency_threshold_ms": settings.latency_spike_threshold_ms,
             "analysis": {},
+            "rag_context": [],
             "recommendation": None,
             "errors": []
         }
@@ -118,6 +119,7 @@ async def evaluate_scaling_with_mcp(payload: ClusterMetricsPayload) -> ScalingRe
                     "pods_sampled": recent_logs.get("pods_sampled", 0)
                 }
             },
+            "rag_context": [],
             "recommendation": None,
             "errors": []
         }

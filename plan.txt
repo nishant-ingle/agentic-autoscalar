@@ -159,9 +159,9 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 #### **Acceptance Criteria:**
 
-* [ ] PostgreSQL instance successfully persists vector embeddings.
-* [ ] Seeding script populates the vector store with structured infrastructure runbooks.
-* [ ] FastAPI agent successfully queries `pgvector` and injects retrieved operational context into its reasoning prompt.
+* [x] PostgreSQL instance successfully persists vector embeddings.
+* [x] Seeding script populates the vector store with structured infrastructure runbooks.
+* [x] FastAPI agent successfully queries `pgvector` and injects retrieved operational context into its reasoning prompt.
 
 ---
 

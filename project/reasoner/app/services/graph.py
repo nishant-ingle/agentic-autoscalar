@@ -8,6 +8,7 @@ from app.schemas.telemetry import ClusterMetricsPayload
 from app.schemas.recommendation import ScalingRecommendationResponse, ScalingAction
 from app.services.heuristic import calculate_heuristic_scaling
 from app.services.llm_factory import get_chat_model
+from app.services.rag_retriever import rag_retriever
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -18,12 +19,13 @@ class ReasonerState(TypedDict):
     target_cpu: float
     latency_threshold_ms: float
     analysis: Dict[str, Any]
+    rag_context: List[Dict[str, Any]]
     recommendation: Optional[ScalingRecommendationResponse]
     errors: List[str]
 
 
 def analyze_telemetry_node(state: ReasonerState) -> Dict[str, Any]:
-    """Node 1: Evaluates raw metrics and computes operational analysis."""
+    """Node 1: Evaluates raw metrics, computes operational analysis, and retrieves RAG runbooks."""
     payload = state["payload"]
     target_cpu = state.get("target_cpu", 65.0)
     latency_thresh = state.get("latency_threshold_ms", 250.0)
@@ -43,7 +45,18 @@ def analyze_telemetry_node(state: ReasonerState) -> Dict[str, Any]:
         "urgency": "HIGH" if (latency_breach or high_error_rate or cpu_ratio > 1.4) else "NORMAL"
     }
 
-    return {"analysis": analysis}
+    # Query pgvector for operational incident memory matching current telemetry symptoms
+    query_str = (
+        f"Workload: {payload.workload_name}. CPU: {payload.cpu_utilization_percent:.1f}%, "
+        f"P99 latency: {payload.http_p99_latency_ms:.1f}ms, Error rate: {payload.error_rate_percent:.1f}%, "
+        f"Throughput: {payload.http_requests_per_second:.1f} RPS."
+    )
+    rag_runbooks = rag_retriever.retrieve_relevant_runbooks(query=query_str, top_k=settings.rag_top_k)
+
+    return {
+        "analysis": analysis,
+        "rag_context": rag_runbooks,
+    }
 
 
 async def reasoning_node(state: ReasonerState) -> Dict[str, Any]:
@@ -63,14 +76,21 @@ async def reasoning_node(state: ReasonerState) -> Dict[str, Any]:
 
     system_prompt = (
         "You are an expert Autonomous Site Reliability Engineer (SRE) managing a Kubernetes workload.\n"
-        "Analyze the provided cluster telemetry, workload bounds, and performance targets.\n"
+        "Analyze the provided cluster telemetry, workload bounds, performance targets, and retrieved historical incident runbooks (Operational Memory).\n"
         "Your task is to generate a structured scaling recommendation following these rules:\n"
         "1. Strictly enforce target_replicas between min_replicas and max_replicas inclusive.\n"
         "2. If CPU utilization > target CPU or P99 latency > threshold, scale up to prevent degraded user experience.\n"
         "3. If CPU is significantly underutilized (< 40% of target) and traffic is idle, scale down conservatively by at least 1 replica to conserve infrastructure resources.\n"
         "4. If telemetry is balanced within healthy operational bounds, maintain current replicas.\n"
-        "5. Provide rigorous analytical reasoning explaining the quantitative driver behind your decision."
+        "5. Consult retrieved SRE runbooks: incorporate operational heuristics, cooldown advice, or failure mode caveats into your reasoning.\n"
+        "6. Provide rigorous analytical reasoning explaining the quantitative driver behind your decision."
     )
+
+    rag_context = state.get("rag_context") or []
+    rag_text = "\n".join(
+        f"- [Runbook {doc.get('title')} (Distance: {doc.get('distance')})]: {doc.get('content')}"
+        for doc in rag_context
+    ) if rag_context else "None available."
 
     human_prompt = (
         f"Workload: {payload.namespace}/{payload.workload_name}\n"
@@ -82,7 +102,8 @@ async def reasoning_node(state: ReasonerState) -> Dict[str, Any]:
         f"Observed Throughput (RPS): {payload.http_requests_per_second:.1f}\n"
         f"Observed P99 Latency: {payload.http_p99_latency_ms:.1f}ms\n"
         f"Error Rate: {payload.error_rate_percent:.1f}%\n"
-        f"Pre-Analysis: {analysis}\n\n"
+        f"Pre-Analysis: {analysis}\n"
+        f"Retrieved Operational Runbooks (RAG Memory):\n{rag_text}\n\n"
         f"Provide your scaling decision."
     )
 
@@ -114,6 +135,7 @@ async def reasoning_node(state: ReasonerState) -> Dict[str, Any]:
             res.action = ScalingAction.MAINTAIN
 
         res.is_fallback = False
+        res.operational_runbooks_retrieved = len(state.get("rag_context") or [])
         res.model_used = getattr(llm, "model_name", getattr(llm, "model", "llm-structured-agent"))
         logger.info(
             "✔ [LLM CALL SUCCESSFUL] Model: '%s' | Action: %s | Target Replicas: %d (Current: %d) | Confidence: %.2f",
@@ -159,6 +181,7 @@ def fallback_node(state: ReasonerState) -> Dict[str, Any]:
         latency_threshold_ms=latency_thresh,
         fallback_reason=fallback_reason
     )
+    recommendation.operational_runbooks_retrieved = len(state.get("rag_context") or [])
     return {"recommendation": recommendation}
 
 

@@ -108,6 +108,20 @@ class KubernetesClient:
             }
         except Exception as exc:
             logger.error("Failed to read workload metrics for %s/%s: %s", namespace, workload_name, exc)
+            if settings.mock_mode:
+                return {
+                    "status": "mock_success",
+                    "namespace": namespace,
+                    "workload_name": workload_name,
+                    "desired_replicas": 2,
+                    "ready_replicas": 2,
+                    "available_replicas": 2,
+                    "updated_replicas": 2,
+                    "pods": [
+                        {"name": f"{workload_name}-mock-pod-1", "phase": "Running", "restarts": 0, "ready": True},
+                        {"name": f"{workload_name}-mock-pod-2", "phase": "Running", "restarts": 0, "ready": True}
+                    ]
+                }
             return {"status": "error", "error": str(exc), "namespace": namespace, "workload": workload_name}
 
     def fetch_recent_logs(
@@ -128,6 +142,7 @@ class KubernetesClient:
                     "namespace": namespace,
                     "workload_name": workload_name,
                     "tail_lines": safe_tail,
+                    "pods_sampled": 2,
                     "entries": [
                         {"pod": f"{workload_name}-mock", "log": "[HTTP] 200 GET /api/workload 12ms"},
                         {"pod": f"{workload_name}-mock", "log": "[HTTP] 200 GET /healthz 1ms"}
@@ -185,6 +200,18 @@ class KubernetesClient:
             }
         except Exception as exc:
             logger.error("Failed to fetch logs for %s/%s: %s", namespace, workload_name, exc)
+            if settings.mock_mode:
+                return {
+                    "status": "mock_success",
+                    "namespace": namespace,
+                    "workload_name": workload_name,
+                    "tail_lines": safe_tail,
+                    "pods_sampled": 2,
+                    "entries": [
+                        {"pod": f"{workload_name}-mock", "log": "[HTTP] 200 GET /api/workload 12ms"},
+                        {"pod": f"{workload_name}-mock", "log": "[HTTP] 200 GET /healthz 1ms"}
+                    ]
+                }
             return {"status": "error", "error": str(exc), "namespace": namespace, "workload": workload_name}
 
 

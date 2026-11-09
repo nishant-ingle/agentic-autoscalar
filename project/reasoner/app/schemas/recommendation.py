@@ -25,6 +25,11 @@ class ScalingRecommendationResponse(BaseModel):
         default="METRICS_AGGREGATE",
         description="Key metric triggering the decision (e.g. CPU_UTILIZATION, P99_LATENCY, STEADY_STATE)"
     )
+    operational_runbooks_retrieved: int = Field(
+        default=0,
+        ge=0,
+        description="Number of relevant SRE incident runbooks retrieved from pgvector operational memory"
+    )
     is_fallback: bool = Field(
         default=False, description="Whether fallback heuristic reasoning was engaged due to LLM error/timeout"
     )

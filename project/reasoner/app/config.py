@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     # MCP Integration: defaults to modern Streamable HTTP endpoint (/mcp)
     mcp_server_url: str = os.getenv("MCP_SERVER_URL", "http://localhost:8001/mcp")
 
+    # Operational RAG & pgvector Configuration (Epic 5)
+    rag_enabled: bool = os.getenv("RAG_ENABLED", "true").lower() in ("true", "1", "yes")
+    pg_host: str = os.getenv("PGHOST", os.getenv("DB_HOST", "localhost"))
+    pg_port: int = int(os.getenv("PGPORT", os.getenv("DB_PORT", "5432")))
+    pg_database: str = os.getenv("PGDATABASE", os.getenv("DB_NAME", "agentic_autoscalar_db"))
+    pg_user: str = os.getenv("PGUSER", os.getenv("DB_USER", "agentic_autoscalar"))
+    pg_password: str = os.getenv("PGPASSWORD", os.getenv("DB_PASSWORD_BASE", "agentic_autoscalar"))
+    rag_top_k: int = int(os.getenv("RAG_TOP_K", "2"))
+    embedding_model_name: str = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
+
     model_config = {
         "env_file": ENV_FILE_PATH or ".env",
         "env_file_encoding": "utf-8",

@@ -52,6 +52,7 @@
 
 	[t1: go/gin dummy app to simulate workload]
 		make app-deploy
+		make app-logs
 
 		local-test:
 			make app-port-forward
@@ -60,6 +61,7 @@
 	[t2: k8s operator]
 		make operator-deploy
         make operator-apply-sample
+		make operator-logs
         make operator-undeploy
 
 		local-test:
@@ -73,6 +75,7 @@
 		make reasoner-undeploy
 
 		local-test:
+			make reasoner-port-forward
 			# 1. Run the 12 automated unit and integration tests
 			make reasoner-test
 
@@ -85,11 +88,10 @@
 	[t4: mcp-server (k8s/prometheus tools)]
 		make mcp-deploy
 		make mcp-logs
-		make mcp-port-forward
-		make verify-mcp
 		make mcp-undeploy	
 
 		local-test:
+			make mcp-port-forward
 			# 1. Run the 13 automated unit and integration tests
 			make mcp-test
 
@@ -101,12 +103,33 @@
 			make verify-mcp
 
 
-Stage          │ Target Microservice … │ Kubernetes Operator (oper… │ AI Reasoner Layer (reasone… │ MCP Server (mcp-*)
-────────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────┼───────────────────────
-Test           │ N/A                   │ make operator-verify       │ make reasoner-test          │ make mcp-test
-Build Docker   │ make app-docker-build │ make operator-docker-build │ make reasoner-docker-build  │ make mcp-docker-build
-Run Local      │ N/A                   │ make operator-run          │ make reasoner-run           │ make mcp-run
-Deploy Cluster │ make app-deploy       │ make operator-deploy       │ make reasoner-deploy        │ make mcp-deploy
-Stream Logs    │ make app-logs         │ make operator-logs         │ make reasoner-logs          │ make mcp-logs
-Verify / Test  │ make app-test-traffic │ make operator-verify       │ make reasoner-verify        │ make verify-mcp
-Undeploy       │ make app-undeploy     │ make operator-undeploy     │ make reasoner-undeploy      │ make mcp-undeploy
+	[t5: operational memory & rag pipeline (pgvector + sentence-transformers)]
+		make rag-deploy
+		make rag-logs
+		make rag-undeploy
+
+		local-test:
+			# 1. Run the automated unit and integration tests (validates schema, embeddings, pgvector cosine search)
+			make rag-port-forward
+			make rag-test
+			make reasoner-test
+
+			# 2. Run the synthetic SRE incident ingestion pipeline locally
+			make rag-seed
+
+			# 3. Verify inserted vectors and dimensions in PostgreSQL
+			make rag-verify
+
+			# 4. Optional: Clean/reset vector table in local database
+			make rag-clean-db
+
+
+Stage          │ Target Microservice … │ Kubernetes Operator (oper… │ AI Reasoner Layer (reasone… │ MCP Server (mcp-*)    │ Operational RAG (rag-*)
+───────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────┼───────────────────────┼────────────────────────────
+Test           │ N/A                   │ make operator-verify       │ make reasoner-test          │ make mcp-test         │ make rag-test
+Build Docker   │ make app-docker-build │ make operator-docker-build │ make reasoner-docker-build  │ make mcp-docker-build │ make rag-docker-build
+Run Local      │ N/A                   │ make operator-run          │ make reasoner-run           │ make mcp-run          │ make rag-seed
+Deploy Cluster │ make app-deploy       │ make operator-deploy       │ make reasoner-deploy        │ make mcp-deploy       │ make rag-deploy
+Stream Logs    │ make app-logs         │ make operator-logs         │ make reasoner-logs          │ make mcp-logs         │ make rag-logs
+Verify / Test  │ make app-test-traffic │ make operator-verify       │ make reasoner-verify        │ make verify-mcp       │ make rag-verify
+Undeploy       │ make app-undeploy     │ make operator-undeploy     │ make reasoner-undeploy      │ make mcp-undeploy     │ make rag-undeploy

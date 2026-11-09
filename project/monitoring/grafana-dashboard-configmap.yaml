@@ -102,5 +102,5 @@ data:
     dark\",\n  \"tags\": [\"autoscaling\", \"epic1\", \"telemetry\"],\n  \"time\"\
     : { \"from\": \"now-15m\", \"to\": \"now\" },\n  \"timepicker\": { \"refresh_intervals\"\
     : [\"5s\", \"10s\", \"30s\", \"1m\"] },\n  \"timezone\": \"browser\",\n  \"title\"\
-    : \"Target Workload Telemetry (Epic 1)\",\n  \"uid\": \"target-workload-epic1\"\
+    : \"Target Workload Telemetry\",\n  \"uid\": \"target-workload-telemetry\"\
     \n}\n"

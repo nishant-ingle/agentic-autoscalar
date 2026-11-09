@@ -32,6 +32,20 @@ spec:
               value: "gpt-4o-mini"
             - name: MCP_SERVER_URL
               value: "http://mcp-server.workload-system.svc.cluster.local:8001/mcp"
+            - name: PGHOST
+              value: "postgres"
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: "agentic_autoscalar_db"
+            - name: PGUSER
+              value: "agentic_autoscalar"
+            - name: PGPASSWORD
+              value: "agentic_autoscalar"
+            - name: RAG_ENABLED
+              value: "true"
+            - name: HF_HOME
+              value: "/app/.cache/huggingface"
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:

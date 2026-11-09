@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-synthetic-schema
+  namespace: workload-system
+data:
+  config.yaml: |
+    mode: synthetic
+    database:
+      host: ${PGHOST:-postgres}
+      port: ${PGPORT:-5432}
+      dbname: ${PGDATABASE:-agentic_autoscalar_db}
+      user: ${PGUSER:-agentic_autoscalar}
+      password: ${PGPASSWORD:-agentic_autoscalar}
+    embedding:
+      model_name: "all-MiniLM-L6-v2"
+      dimension: 384
+    synthetic:
+      schema_path: "/etc/rag/synthetic_schema.yaml"
+
+  synthetic_schema.yaml: |
+    incidents:
+      - id: "INC-CPU-SPIKE-001"
+        title: "Flash Traffic Surge Exhausting CPU and Thread Pool"
+        scenario: "Sudden load spike on CPU-bound microservices"
+        content: >
+          Incident INC-CPU-SPIKE-001: Target service experienced sudden 4x traffic surge due to marketing campaign.
+          CPU utilization spiked from 25% to 92%, causing request queuing, thread pool starvation, and p99 latency to rise above 1800ms.
+          Remediation & Action: Proactively scale up replica count immediately by 2.5x.
+          Cooldown Window: Maintain scaled replica count for minimum 5 minutes to prevent flapping.
+
+      - id: "INC-MEM-LEAK-002"
+        title: "Slow Heap Growth Leading to OOMKills During Moderate Load"
+        scenario: "Memory accumulation and pod crash looping"
+        content: >
+          Incident INC-MEM-LEAK-002: Service pods encountered repeated OOMKilled events under persistent moderate traffic.
+          Memory metrics showed linear climb exceeding 85% limit without subsequent release.
+          Remediation & Action: Scale replicas from N to N+2 to distribute load while scheduling rolling restarts.
+
+      - id: "INC-FLAP-OSC-003"
+        title: "Aggressive Metric Oscillation and Rapid HPA Flapping"
+        scenario: "Unstable scaling cycling between scale-up and scale-down"
+        content: >
+          Incident INC-FLAP-OSC-003: Target microservice entered a destructive flapping state scaling between 2 and 10 replicas.
+          Remediation & Action: Enforce a strict hysteresis window. Reject scale-down recommendations within 10 minutes of any scale-up event.
+
+      - id: "INC-DEP-LATENCY-004"
+        title: "Downstream Database Connection Exhaustion Causing Upstream Latency"
+        scenario: "Slow downstream dependency mimicking CPU load"
+        content: >
+          Incident INC-DEP-LATENCY-004: HTTP response times elevated to 3200ms while CPU utilization remained under 30%.
+          Root Cause: Postgres connection pool reached 100% capacity due to slow unindexed analytical queries.
+          Remediation & Action: Hold target replicas constant, activate rate-limiting guardrails, avoid creating more DB connections.
+
+      - id: "INC-BATCH-BURST-005"
+        title: "Periodic Scheduled Cron Batch Processing Ingestion Spike"
+        scenario: "Predictable periodic telemetry burst"
+        content: >
+          Incident INC-BATCH-BURST-005: Every hour at minute :00, worker queues experience an influx of 10,000 ingestion tasks.
+          Remediation & Action: Moderate step scale-up (+1 to +2 replicas) 2 minutes before the top of the hour.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rag-syn-job
+  namespace: workload-system
+  labels:
+    app.kubernetes.io/name: rag-syn-job
+    app.kubernetes.io/part-of: agentic-autoscaler
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: rag-syn-job
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: syn-generator
+          image: rag-syn-generator:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - epic5.approach_syn_generator
+            - /etc/rag/config.yaml
+          env:
+            - name: PGHOST
+              value: "postgres"
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: "agentic_autoscalar_db"
+            - name: PGUSER
+              value: "agentic_autoscalar"
+            - name: PGPASSWORD
+              value: "agentic_autoscalar"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/rag
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: config-volume
+          configMap:
+            name: rag-synthetic-schema

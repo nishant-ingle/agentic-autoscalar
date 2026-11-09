@@ -1,15 +1,20 @@
 .PHONY: all help port-forward deploy undeploy build-docker test-traffic verify swagger \
-	app-build-docker app-docker-build app-deploy app-port-forward app-logs app-test-traffic app-verify app-swagger app-undeploy \
-	operator-build operator-docker-build operator-install operator-run operator-deploy operator-logs operator-apply-sample operator-verify verify-operator operator-undeploy \
-	reasoner-test reasoner-run reasoner-docker-build reasoner-deploy reasoner-logs reasoner-verify verify-reasoner reasoner-undeploy \
-	mcp-test mcp-run mcp-docker-build mcp-deploy mcp-logs mcp-verify verify-mcp mcp-port-forward mcp-undeploy
+	app-build-docker app-docker-build app-deploy app-port-forward app-logs app-test-traffic app-verify app-swagger app-undeploy app-test test-app \
+	operator-manifests operator-generate operator-test operator-build operator-docker-build operator-install operator-run operator-deploy operator-logs operator-apply-sample operator-verify verify-operator operator-undeploy \
+	reasoner-test reasoner-run reasoner-docker-build reasoner-deploy reasoner-logs reasoner-verify verify-reasoner reasoner-port-forward reasoner-undeploy \
+	mcp-test mcp-run mcp-docker-build mcp-deploy mcp-logs mcp-verify verify-mcp mcp-port-forward mcp-undeploy \
+	rag-test rag-seed rag-docker-build rag-deploy rag-logs rag-verify verify-rag rag-clean-db rag-port-forward rag-undeploy
 
 NAMESPACE_WORKLOAD := workload-system
 NAMESPACE_MONITORING := monitoring
 OPERATOR_IMG ?= agentic-autoscaler:latest
 REASONER_IMG ?= reasoner-service:latest
 MCP_IMG ?= mcp-server:latest
+RAG_IMG ?= rag-syn-generator:latest
+PGVECTOR_IMG ?= pgvector/pgvector:pg16
 KIND_CLUSTER_NAME ?= desktop
+
+all: help
 
 help:
 	@echo "================================================================================"
@@ -18,6 +23,7 @@ help:
 	@echo "Target Microservice & Monitoring Stack (Gin App + Prometheus/Grafana):"
 	@echo "  make deploy                (or make app-deploy) Deploy Prometheus, Grafana, and Gin workload"
 	@echo "  make build-docker          (or make app-docker-build) Build Gin workload Docker image"
+	@echo "  make app-test              (or make test-app) Run Gin workload Go unit tests"
 	@echo "  make app-logs              Stream multi-pod prefixed logs from target-workload pods"
 	@echo "  make test-traffic          (or make app-test-traffic) Fire synthetic traffic at workload"
 	@echo "  make verify                (or make app-verify) Query Prometheus to verify metric ingestion"
@@ -26,6 +32,9 @@ help:
 	@echo "  make undeploy              (or make app-undeploy) Clean up workload and Helm releases"
 	@echo ""
 	@echo "Kubernetes Operator (Control Plane - operator-system):"
+	@echo "  make operator-manifests    Generate CRD manifests and RBAC using controller-gen"
+	@echo "  make operator-generate     Generate DeepCopy code for Custom Resource API types"
+	@echo "  make operator-test         Run operator controller unit and integration tests"
 	@echo "  make operator-install      Install the AgenticAutoscaler CRD into the cluster"
 	@echo "  make operator-build        Build the Kubebuilder controller manager host binary"
 	@echo "  make operator-docker-build Build the controller manager container image"
@@ -43,6 +52,7 @@ help:
 	@echo "  make reasoner-deploy       Deploy reasoner service to cluster in workload-system"
 	@echo "  make reasoner-logs         Stream logs from in-cluster reasoner service"
 	@echo "  make verify-reasoner       (or make reasoner-verify) Run automated acceptance test for Epic 3"
+	@echo "  make reasoner-port-forward Port-forward in-cluster reasoner service to localhost:8000"
 	@echo "  make reasoner-undeploy     Delete reasoner service deployment from cluster"
 	@echo ""
 	@echo "Model Context Protocol (MCP) Server (Epic 4 - k8s & Prometheus tools):"
@@ -54,6 +64,17 @@ help:
 	@echo "  make verify-mcp            (or make mcp-verify) Run automated acceptance test for Epic 4"
 	@echo "  make mcp-port-forward      Port-forward in-cluster MCP server to localhost:8001"
 	@echo "  make mcp-undeploy          Delete MCP server deployment, service, and RBAC"
+	@echo ""
+	@echo "Operational Memory & RAG Pipeline (Epic 5 - pgvector & Synthetic SRE Runbooks):"
+	@echo "  make rag-test              Run pytest test suite for Epic 5 RAG pipeline"
+	@echo "  make rag-seed              Seed synthetic SRE incidents and embeddings into pgvector"
+	@echo "  make rag-verify            (or make verify-rag) Query PostgreSQL to verify vector embeddings"
+	@echo "  make rag-docker-build      Build RAG synthetic generator container image"
+	@echo "  make rag-deploy            Deploy and run RAG seeding Job in cluster"
+	@echo "  make rag-logs              Stream logs from in-cluster RAG seeding Job"
+	@echo "  make rag-clean-db          Truncate and reset rag_documents table in local database"
+	@echo "  make rag-port-forward      Port-forward in-cluster PostgreSQL (pgvector) to localhost:5432"
+	@echo "  make rag-undeploy          Delete RAG seeding Job and ConfigMap from cluster"
 	@echo "================================================================================"
 
 # ==============================================================================
@@ -118,6 +139,7 @@ undeploy:
 	-kubectl delete -f k8s/namespace.yaml --ignore-not-found
 	-helm uninstall prometheus -n $(NAMESPACE_MONITORING)
 	-helm uninstall grafana -n $(NAMESPACE_MONITORING)
+	-kubectl delete ns $(NAMESPACE_MONITORING)
 
 swagger:
 	@echo "Generating Swagger documentation..."
@@ -126,6 +148,12 @@ swagger:
 app-logs:
 	@echo "Streaming logs from target-workload pods..."
 	kubectl logs -l app=target-workload -n $(NAMESPACE_WORKLOAD) -f --prefix --max-log-requests=10
+
+app-test:
+	@echo "Running target microservice unit tests..."
+	cd target-service && go test -v ./...
+
+test-app: app-test
 
 # Aliases for app-* naming consistency
 app-build-docker: build-docker
@@ -136,6 +164,18 @@ app-test-traffic: test-traffic
 app-verify: verify
 app-swagger: swagger
 app-undeploy: undeploy
+
+operator-manifests:
+	@echo "Generating Kubernetes manifests (CRDs, RBAC) for operator..."
+	cd operator && make manifests
+
+operator-generate:
+	@echo "Generating DeepCopy code for operator API types..."
+	cd operator && make generate
+
+operator-test:
+	@echo "Running operator test suite..."
+	cd operator && make test
 
 operator-build:
 	@echo "Building Agentic Autoscaler controller manager..."
@@ -202,6 +242,8 @@ reasoner-deploy: reasoner-docker-build
 	@echo "Ensuring reasoner image is available in local cluster..."
 	@which kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$" && \
 		(echo "Loading image $(REASONER_IMG) into Kind cluster '$(KIND_CLUSTER_NAME)'..." && kind load docker-image $(REASONER_IMG) --name $(KIND_CLUSTER_NAME)) || true
+	@echo "Ensuring namespace $(NAMESPACE_WORKLOAD) exists..."
+	kubectl apply -f k8s/namespace.yaml
 	@echo "Configuring in-cluster LLM credentials secret (if available in .env or environment)..."
 	@API_KEY=$$(grep -E "^OPENAI_API_KEY=" ../.env .env 2>/dev/null | head -n 1 | cut -d "=" -f2- | tr -d "\"'" || true); \
 	if [ -z "$$API_KEY" ]; then API_KEY="$$OPENAI_API_KEY"; fi; \
@@ -293,3 +335,64 @@ mcp-undeploy:
 	-kubectl delete -f k8s/mcp-server-service.yaml --ignore-not-found
 	-kubectl delete -f k8s/mcp-server-deployment.yaml --ignore-not-found
 	-kubectl delete -f k8s/mcp-server-rbac.yaml --ignore-not-found
+
+# ==============================================================================
+# 5. Operational Memory & RAG Targets (Epic 5 - pgvector & Synthetic SRE Runbooks)
+# ==============================================================================
+
+rag-test:
+	@echo "Running Epic 5 RAG test suite..."
+	cd rag && PYTHONPATH=. ../../venv/bin/pytest tests/epic5/test_approach_syn_generator.py -v
+
+rag-seed:
+	@echo "Seeding synthetic SRE incidents and generating embeddings into pgvector..."
+	cd rag && PYTHONPATH=. ../../venv/bin/python -m epic5.approach_syn_generator epic5/config.yaml
+
+rag-verify:
+	@echo "Verifying documents and embeddings in pgvector..."
+	@kubectl exec deployment/postgres -n $(NAMESPACE_WORKLOAD) -- psql -U agentic_autoscalar -d agentic_autoscalar_db -c "SELECT id, title, vector_dims(embedding) AS dims, created_at FROM rag_documents;" 2>/dev/null || \
+		psql -U agentic_autoscalar -d agentic_autoscalar_db -c "SELECT id, title, vector_dims(embedding) AS dims, created_at FROM rag_documents;"
+
+verify-rag: rag-verify
+
+rag-docker-build:
+	@echo "Building RAG Synthetic Generator Docker image..."
+	cd rag && docker build -t $(RAG_IMG) .
+
+rag-deploy: rag-docker-build
+	@echo "Ensuring RAG Generator and pgvector images are available in local cluster..."
+	@which kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$" && \
+		(echo "Loading image $(RAG_IMG) into Kind cluster '$(KIND_CLUSTER_NAME)'..." && kind load docker-image $(RAG_IMG) --name $(KIND_CLUSTER_NAME)) || true
+	@which kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -q "^$(KIND_CLUSTER_NAME)$$" && \
+		(echo "Loading image $(PGVECTOR_IMG) into Kind cluster '$(KIND_CLUSTER_NAME)'..." && kind load docker-image $(PGVECTOR_IMG) --name $(KIND_CLUSTER_NAME)) || true
+	@echo "Ensuring namespace $(NAMESPACE_WORKLOAD) exists..."
+	kubectl apply -f k8s/namespace.yaml
+	@echo "Deploying in-cluster PostgreSQL (pgvector) container..."
+	kubectl apply -f k8s/postgres-deployment.yaml
+	@echo "Waiting for in-cluster PostgreSQL to become ready..."
+	kubectl rollout status deployment/postgres -n $(NAMESPACE_WORKLOAD) --timeout=90s
+	@echo "Applying RAG ConfigMap and seeding Job..."
+	-kubectl delete job rag-syn-job -n $(NAMESPACE_WORKLOAD) --ignore-not-found
+	-kubectl delete configmap rag-synthetic-schema -n $(NAMESPACE_WORKLOAD) --ignore-not-found
+	kubectl apply -f rag/k8s/rag-syn-job.yaml
+	@echo "Waiting for RAG seeding job to complete..."
+	kubectl wait --for=condition=complete --timeout=120s job/rag-syn-job -n $(NAMESPACE_WORKLOAD) || true
+
+rag-logs:
+	@echo "Streaming logs from RAG Job..."
+	kubectl logs job/rag-syn-job -n $(NAMESPACE_WORKLOAD)
+
+rag-clean-db:
+	@echo "Cleaning up rag_documents table in database..."
+	@kubectl exec deployment/postgres -n $(NAMESPACE_WORKLOAD) -- psql -U agentic_autoscalar -d agentic_autoscalar_db -c "TRUNCATE TABLE rag_documents RESTART IDENTITY;" 2>/dev/null || \
+		psql -U agentic_autoscalar -d agentic_autoscalar_db -c "TRUNCATE TABLE rag_documents RESTART IDENTITY;"
+
+rag-port-forward:
+	@echo "Port-forwarding PostgreSQL (pgvector) to localhost:5432..."
+	kubectl port-forward svc/postgres -n $(NAMESPACE_WORKLOAD) 5432:5432
+
+rag-undeploy:
+	@echo "Deleting RAG Job, ConfigMap, and in-cluster PostgreSQL deployment..."
+	-kubectl delete -f rag/k8s/rag-syn-job.yaml --ignore-not-found
+	-kubectl delete -f k8s/postgres-deployment.yaml --ignore-not-found
+

@@ -1,0 +1,17 @@
+# Operational RAG Configuration for Epic 5
+# Supported modes: synthetic
+mode: synthetic
+
+database:
+  host: ${PGHOST:-localhost}
+  port: ${PGPORT:-5432}
+  dbname: ${PGDATABASE:-agentic_autoscalar_db}
+  user: ${PGUSER:-agentic_autoscalar}
+  password: ${PGPASSWORD:-agentic_autoscalar}
+
+embedding:
+  model_name: "all-MiniLM-L6-v2"
+  dimension: 384
+
+synthetic:
+  schema_path: "synthetic_epic5.yaml"
