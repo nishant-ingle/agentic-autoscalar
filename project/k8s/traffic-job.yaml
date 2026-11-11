@@ -1,0 +1,184 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: traffic-generator
+  namespace: workload-system
+  labels:
+    app: traffic-generator
+    app.kubernetes.io/part-of: agentic-autoscaler
+spec:
+  ttlSecondsAfterFinished: 120   # auto-cleanup 2 min after job completes
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      restartPolicy: Never
+      serviceAccountName: traffic-generator-sa
+      containers:
+        - name: traffic
+          image: alpine/curl:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              MODE="${MODE:-roundrobin}"
+              DURATION_SECS="${DURATION_SECS:-60}"
+              NAMESPACE="${NAMESPACE:-workload-system}"
+              WORKLOAD_LABEL="${WORKLOAD_LABEL:-app=target-workload}"
+              POD_PORT="${POD_PORT:-8080}"
+              MAX_JOBS="${MAX_JOBS:-10}"
+
+              # Concurrency gate — POSIX sh compatible (BusyBox ash: no "jobs -r" flag)
+              throttle() {
+                while [ "$(jobs | wc -l)" -ge "$MAX_JOBS" ]; do sleep 0.05; done
+              }
+
+              echo "=========================================================="
+              echo " Mode      : ${MODE}"
+              echo " Duration  : ${DURATION_SECS}s"
+              echo " Namespace : ${NAMESPACE}"
+              echo "=========================================================="
+
+              # Discover pod IPs via the K8s API using the downward-mounted service account token.
+              # Note: K8s API returns pretty-printed JSON with a space after the colon: "podIP": "x.x.x.x"
+              get_pod_ips() {
+                TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                APISERVER="https://kubernetes.default.svc"
+                CA="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+                curl -s --cacert "$CA" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  "${APISERVER}/api/v1/namespaces/${NAMESPACE}/pods?labelSelector=${WORKLOAD_LABEL}&fieldSelector=status.phase%3DRunning" \
+                  | grep -o '"podIP": "[^"]*"' \
+                  | cut -d'"' -f4 \
+                  | grep -v '^$' || true
+              }
+
+              END_TIME=$(( $(date +%s) + DURATION_SECS ))
+
+              if [ "${MODE}" = "service" ]; then
+                # Use ClusterIP Service DNS name — no RBAC needed
+                SVC="http://target-workload.${NAMESPACE}.svc.cluster.local:${POD_PORT}"
+                echo "Routing through Service: ${SVC}"
+                while [ "$(date +%s)" -lt "$END_TIME" ]; do
+                  throttle; curl -sf "${SVC}/api/workload?rounds=15000&delay_ms=20" > /dev/null &
+                  throttle; curl -sf "${SVC}/api/load/cpu?duration_ms=600&concurrency=2" > /dev/null &
+                  sleep 0.2
+                done
+                wait
+                echo "Done (service mode)."
+                exit 0
+              fi
+
+              # Resolve pod IPs for roundrobin / skewed
+              POD_IPS=$(get_pod_ips)
+              if [ -z "$POD_IPS" ]; then
+                echo "ERROR: no running pods found (label=${WORKLOAD_LABEL}, ns=${NAMESPACE})"
+                exit 1
+              fi
+
+              echo "Discovered pods:"
+              echo "$POD_IPS" | while read -r ip; do echo "  → http://${ip}:${POD_PORT}"; done
+              echo ""
+
+              # Build indexed array from newline-separated IPs (POSIX sh compatible)
+              i=0
+              for ip in $POD_IPS; do
+                eval "POD_${i}=${ip}"
+                i=$(( i + 1 ))
+              done
+              POD_COUNT=$i
+
+              get_pod_ip() {
+                idx=$(( $1 % POD_COUNT ))
+                eval echo "\${POD_${idx}}"
+              }
+
+              RR=0
+              TICK=0
+
+              if [ "${MODE}" = "roundrobin" ]; then
+                echo "Starting round-robin traffic across ${POD_COUNT} pod(s)..."
+                while [ "$(date +%s)" -lt "$END_TIME" ]; do
+                  TARGET=$(get_pod_ip $RR); RR=$(( RR + 1 ))
+                  throttle; curl -sf "http://${TARGET}:${POD_PORT}/api/workload?rounds=15000&delay_ms=20" > /dev/null &
+
+                  if [ $(( TICK % 5 )) -eq 0 ]; then
+                    BURN=$(get_pod_ip $RR); RR=$(( RR + 1 ))
+                    throttle; curl -sf "http://${BURN}:${POD_PORT}/api/load/cpu?duration_ms=600&concurrency=2" > /dev/null &
+                  fi
+
+                  TICK=$(( TICK + 1 ))
+                  sleep 0.2
+                done
+                wait
+                echo "Done. Round-robin across ${POD_COUNT} pod(s)."
+
+              elif [ "${MODE}" = "skewed" ]; then
+                HOT=$(get_pod_ip 0)
+                echo "HOT pod (CPU burn pinned): http://${HOT}:${POD_PORT}"
+                while [ "$(date +%s)" -lt "$END_TIME" ]; do
+                  throttle; curl -sf "http://${HOT}:${POD_PORT}/api/load/cpu?duration_ms=800&concurrency=4" > /dev/null &
+
+                  TARGET=$(get_pod_ip $RR); RR=$(( RR + 1 ))
+                  throttle; curl -sf "http://${TARGET}:${POD_PORT}/api/workload?rounds=10000&delay_ms=10" > /dev/null &
+
+                  HC=$(get_pod_ip $RR); RR=$(( RR + 1 ))
+                  throttle; curl -sf "http://${HC}:${POD_PORT}/healthz" > /dev/null &
+
+                  TICK=$(( TICK + 1 ))
+                  sleep 0.2
+                done
+                wait
+                echo "Done. Skewed — hot pod was ${HOT}."
+
+              else
+                echo "ERROR: unknown mode '${MODE}'. Use: service | roundrobin | skewed"
+                exit 1
+              fi
+
+          env:
+            - name: MODE
+              value: "roundrobin"           # override with kubectl set env or patch
+            - name: DURATION_SECS
+              value: "60"
+            - name: NAMESPACE
+              value: "workload-system"
+            - name: WORKLOAD_LABEL
+              value: "app=target-workload"
+            - name: POD_PORT
+              value: "8080"
+            - name: MAX_JOBS
+              value: "10"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traffic-generator-sa
+  namespace: workload-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: traffic-generator-role
+  namespace: workload-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-generator-rb
+  namespace: workload-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traffic-generator-role
+subjects:
+  - kind: ServiceAccount
+    name: traffic-generator-sa
+    namespace: workload-system

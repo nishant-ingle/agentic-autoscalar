@@ -1,0 +1,99 @@
+### ✅ AC1 — Absolute Boundary Enforcement (min/max clamp)
+
+  Test: Reasoner recommends > maxReplicas (5)
+
+  Temporarily patch the CRD to inject an out-of-bounds desire by scaling the deployment past the max:
+
+    # Check current status columns
+    kubectl get aa target-workload-autoscaler -n workload-system -o wide
+    
+    # Watch events in real-time
+    kubectl get events -n workload-system --sort-by='.lastTimestamp' -w
+
+  Then manually call the reasoner with a value exceeding max:
+
+    # Port-forward to reasoner
+    kubectl port-forward svc/reasoner-service 8000:8000 -n workload-system &
+    
+    # Call evaluate-scaling with proposed=10 (> maxReplicas=5)
+    curl -s -X POST http://localhost:8000/evaluate-scaling \
+      -H "Content-Type: application/json" \
+      -d '{"current_replicas": 2, "cpu_utilization_percent": 90, "memory_utilization_percent": 60, "pod_count": 2}'
+
+  Expected guardrail behavior: Controller clamps to 5. Status shows:
+
+    kubectl get aa target-workload-autoscaler -n workload-system \
+      -o jsonpath='{.status.lastGuardrailAction} {.status.lastGuardrailReason}'
+    # → CLAMPED  ...exceeds maxReplicas...
+
+  Check event:
+
+    kubectl describe aa target-workload-autoscaler -n workload-system | grep -A5 "Events"
+    # → Warning  GuardrailInterception  ...
+  ──────
+  ### ✅ AC2 — Anti-Flapping (Hysteresis + Cooldown)
+
+  Test: Scale up → immediately try scale down
+
+    # 1. Generate high CPU to trigger a scale-up
+    kubectl port-forward svc/target-workload-service 8080:8080 -n workload-system &
+    curl "http://localhost:8080/api/load/cpu?duration_ms=5000&concurrency=4"
+    
+    # 2. Watch replicas increase (wait ~15–30s)
+    kubectl get deploy target-workload -n workload-system -w
+    
+    # 3. After scale-up, check status
+    kubectl get aa target-workload-autoscaler -n workload-system \
+      -o jsonpath='{.status.lastScaleAction} {.status.lastScaleUpTime}'
+    # → SCALE_UP  <timestamp>
+    
+    # 4. Now remove load — reasoner will recommend scale-down
+    # Wait 15s for next reconcile, observe that scale-down is REJECTED
+    kubectl get aa target-workload-autoscaler -n workload-system \
+      -o jsonpath='{.status.lastGuardrailAction} {.status.lastGuardrailReason}'
+    # → REJECTED  scale-down within hysteresis window (10 min)
+  ──────
+  ### ✅ AC3 — Reactive HPA Fallback on Reasoner Outage
+
+  Test: Kill the reasoner pod, observe fallback
+
+    # 1. Kill the reasoner
+    kubectl scale deploy reasoner-service --replicas=0 -n workload-system
+    
+    # 2. Wait one reconcile cycle (~15s), then check status
+    kubectl get aa target-workload-autoscaler -n workload-system \
+      -o jsonpath='{.status.fallbackEngaged} {.status.conditions[?(@.type=="ReasonerHealthy")].status}'
+    # → true  False
+    
+    # 3. Generate some CPU load — HPA fallback should still scale correctly
+    make reasoner-port-forward
+    curl "http://localhost:8080/api/load/cpu?duration_ms=3000&concurrency=2"
+    kubectl get deploy target-workload -n workload-system -w
+    
+    # 4. Check event for fallback
+    kubectl describe aa target-workload-autoscaler -n workload-system | grep -i "fallback\|outage"
+    
+    # 5. Restore reasoner
+    kubectl scale deploy reasoner-service --replicas=1 -n workload-system
+    # After next reconcile, ReasonerHealthy → True, fallbackEngaged → false
+  ──────
+  ### 📊 Quick Status Overview
+
+    # See all printer columns at once
+    kubectl get aa -n workload-system
+    # COLUMNS: TARGET  MIN  MAX  CURRENT  DESIRED  ACTION  FALLBACK  AGE
+    
+    # Full status dump
+    kubectl get aa target-workload-autoscaler -n workload-system -o yaml | grep -A30 "status:"
+    
+    # Operator logs (guardrail audit events)
+    kubectl logs -l control-plane=controller-manager -n workload-system --tail=50 | grep -E
+    "GUARDRAIL|FALLBACK|SCALE_EXECUTED"
+  ──────
+  Three scenarios = three acceptance criteria:
+
+   Scenario                             │ Expected Status                                   │ Expected Event
+  ──────────────────────────────────────┼───────────────────────────────────────────────────┼────────────────────────────────
+   Reasoner proposes > maxReplicas      │ lastGuardrailAction: CLAMPED/REJECTED             │ Warning GuardrailInterception
+   Scale-down within 10 min of scale-up │ lastGuardrailAction: REJECTED + hysteresis reason │ Warning GuardrailInterception
+   Reasoner pod killed                  │ fallbackEngaged: true, ReasonerHealthy: False     │ Warning ReasonerFallback

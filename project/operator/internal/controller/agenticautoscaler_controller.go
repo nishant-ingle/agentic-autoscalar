@@ -417,42 +417,98 @@ func (r *AgenticAutoscalerReconciler) collectTelemetry(
 
 	promURL := autoscaler.Spec.PrometheusURL
 	if promURL == "" {
-		promURL = "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+		// kube-prometheus-stack Helm default service name
+		promURL = "http://prometheus-server.monitoring.svc.cluster.local:80"
 	}
 
-	// Try querying Prometheus for CPU metrics with a short timeout
-	client := &http.Client{Timeout: 500 * time.Millisecond}
-	query := fmt.Sprintf("sum(rate(workload_http_requests_total{namespace=\"%s\"}[1m]))", autoscaler.Namespace)
-	reqURL := fmt.Sprintf("%s/api/v1/query?query=%s", promURL, url.QueryEscape(query))
+	// Query Prometheus with a generous timeout to tolerate brief scrape delays
+	client := &http.Client{Timeout: 3 * time.Second}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err == nil {
+	promQuery := func(query string) (float64, bool) {
+		reqURL := fmt.Sprintf("%s/api/v1/query?query=%s", promURL, url.QueryEscape(query))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return 0, false
+		}
 		resp, err := client.Do(req)
-		if err == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				var promResp struct {
-					Data struct {
-						Result []struct {
-							Value []interface{} `json:"value"`
-						} `json:"result"`
-					} `json:"data"`
-				}
-				if json.NewDecoder(resp.Body).Decode(&promResp) == nil && len(promResp.Data.Result) > 0 {
-					valList := promResp.Data.Result[0].Value
-					if len(valList) >= 2 {
-						if strVal, ok := valList[1].(string); ok {
-							if floatVal, parseErr := strconv.ParseFloat(strVal, 64); parseErr == nil {
-								payload.HTTPRequestsPerSecond = floatVal
-								// Estimate CPU utilization proportional to request throughput if raw CPU is unavailable
-								if floatVal > 0 {
-									payload.CPUUtilizationPercent = floatVal * 2.0
-								}
-							}
-						}
-					}
-				}
+		if err != nil || resp.StatusCode != http.StatusOK {
+			return 0, false
+		}
+		defer resp.Body.Close()
+		var promResp struct {
+			Data struct {
+				Result []struct {
+					Value []interface{} `json:"value"`
+				} `json:"result"`
+			} `json:"data"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&promResp) != nil || len(promResp.Data.Result) == 0 {
+			return 0, false
+		}
+		valList := promResp.Data.Result[0].Value
+		if len(valList) < 2 {
+			return 0, false
+		}
+		if strVal, ok := valList[1].(string); ok {
+			if f, err := strconv.ParseFloat(strVal, 64); err == nil {
+				return f, true
 			}
+		}
+		return 0, false
+	}
+
+	workloadName := autoscaler.Spec.ScaleTargetRef.Name
+	ns := autoscaler.Namespace
+
+	// --- CPU utilization: actual millicores used vs CPU request (matches HPA behaviour) ---
+	// CPU request per pod (from deployment spec), defaulting to 100m if unset
+	cpuRequestMillis := int64(100)
+	if deployment != nil && len(deployment.Spec.Template.Spec.Containers) > 0 {
+		if req := deployment.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu(); req != nil {
+			cpuRequestMillis = req.MilliValue()
+		}
+	}
+	cpuQuery := fmt.Sprintf(
+		`sum(rate(container_cpu_usage_seconds_total{namespace="%s",pod=~"%s-.*",container!="",container!="POD"}[2m])) * 1000`,
+		ns, workloadName,
+	)
+	if cpuMillis, ok := promQuery(cpuQuery); ok && cpuMillis > 0 {
+		totalRequestMillis := float64(cpuRequestMillis) * float64(specReplicas)
+		if totalRequestMillis > 0 {
+			payload.CPUUtilizationPercent = (cpuMillis / totalRequestMillis) * 100.0
+		}
+	}
+
+	// --- HTTP requests per second ---
+	rpsQuery := fmt.Sprintf(`sum(rate(workload_http_requests_total{namespace="%s"}[1m]))`, ns)
+	if rps, ok := promQuery(rpsQuery); ok {
+		payload.HTTPRequestsPerSecond = rps
+	}
+
+	// --- P99 latency (ms) ---
+	latQuery := fmt.Sprintf(
+		`histogram_quantile(0.99, sum(rate(workload_http_request_duration_seconds_bucket{namespace="%s"}[1m])) by (le)) * 1000`,
+		ns,
+	)
+	if lat, ok := promQuery(latQuery); ok && lat > 0 {
+		payload.HTTPP99LatencyMS = lat
+	}
+
+	// --- Memory utilization vs memory request ---
+	memRequestBytes := int64(128 * 1024 * 1024) // default 128Mi
+	if deployment != nil && len(deployment.Spec.Template.Spec.Containers) > 0 {
+		if req := deployment.Spec.Template.Spec.Containers[0].Resources.Requests.Memory(); req != nil {
+			memRequestBytes = req.Value()
+		}
+	}
+	memQuery := fmt.Sprintf(
+		`sum(container_memory_working_set_bytes{namespace="%s",pod=~"%s-.*",container!="",container!="POD"})`,
+		ns, workloadName,
+	)
+	if memBytes, ok := promQuery(memQuery); ok && memBytes > 0 {
+		totalMemRequest := float64(memRequestBytes) * float64(specReplicas)
+		if totalMemRequest > 0 {
+			payload.MemoryUtilizationPercent = (memBytes / totalMemRequest) * 100.0
 		}
 	}
 

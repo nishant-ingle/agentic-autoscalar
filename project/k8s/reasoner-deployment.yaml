@@ -64,20 +64,24 @@ spec:
               protocol: TCP
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
+              cpu: "250m"
               memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1500Mi"
           livenessProbe:
             httpGet:
               path: /healthz
               port: http-reasoner
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 60   # allow model weights to load
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /readyz
               port: http-reasoner
-            initialDelaySeconds: 3
-            periodSeconds: 5
+            initialDelaySeconds: 30   # wait for sentence-transformer init
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

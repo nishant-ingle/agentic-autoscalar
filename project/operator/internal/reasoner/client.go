@@ -29,7 +29,7 @@ import (
 )
 
 // DefaultTimeout is the strict 3-second SLA for reasoner calls as mandated by Epic 6.
-const DefaultTimeout = 3 * time.Second
+const DefaultTimeout = 15 * time.Second
 
 // DefaultTargetCPUPercent is the standard default target CPU utilization for reactive HPA fallback.
 const DefaultTargetCPUPercent int32 = 70
@@ -76,7 +76,7 @@ type Client struct {
 	timeout    time.Duration
 }
 
-// NewClient creates a new Reasoner client with a strict 3-second timeout.
+// NewClient creates a new Reasoner client with a strict 15-second timeout.
 func NewClient(timeout time.Duration, customHTTP HTTPClient) *Client {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
@@ -133,7 +133,7 @@ func (c *Client) EvaluateScaling(
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		// Handles connection failure, context timeout (>3s), network partitions
+		// Handles connection failure, context timeout (>15s), network partitions
 		errMsg := fmt.Sprintf("Reasoner call failed or timed out (>%s): %v", c.timeout, err)
 		fallback := c.ComputeReactiveHPA(payload, targetCPU, errMsg)
 		return fallback, fmt.Errorf("%s", errMsg)

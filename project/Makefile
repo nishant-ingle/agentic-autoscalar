@@ -120,7 +120,35 @@ deploy: build-docker
 
 test-traffic:
 	@chmod +x scripts/test-traffic.sh
-	@./scripts/test-traffic.sh http://localhost:8080 30
+	@if ! curl -s --max-time 1 http://localhost:8080/healthz > /dev/null 2>&1; then \
+		echo "ERROR: No port-forward on localhost:8080. Run 'make port-forward' first (or kubectl port-forward svc/target-workload -n workload-system 8080:8080)."; \
+		exit 1; \
+	fi
+	@./scripts/test-traffic.sh service 30
+
+# Run round-robin or skewed traffic from INSIDE the cluster.
+# Pod IPs (10.244.x.x) are not routable from the Mac host — this Job runs curl inside K8s.
+# Override: make app-test-traffic-job MODE=skewed DURATION_SECS=120
+MODE ?= service
+DURATION_SECS ?= 60
+app-test-traffic-job:
+	@echo "Deploying traffic-generator RBAC + Job (mode=$(MODE), duration=$(DURATION_SECS)s)..."
+	@# Apply RBAC resources (ServiceAccount, Role, RoleBinding) — safe to re-apply at any time
+	@kubectl apply -f k8s/traffic-job.yaml
+	@# Job pod templates are immutable — delete the old Job before recreating with new env values
+	@kubectl delete job traffic-generator -n workload-system --ignore-not-found
+	@# Render the manifest with the requested env values and create the Job fresh
+	@sed \
+		-e '/name: MODE/{' -e 'n' -e 's|value:.*|value: "$(MODE)"|' -e '}' \
+		-e '/name: DURATION_SECS/{' -e 'n' -e 's|value:.*|value: "$(DURATION_SECS)"|' -e '}' \
+		k8s/traffic-job.yaml | kubectl apply -f -
+	@echo "Waiting for Job pod to become ready..."
+	@kubectl wait --for=condition=ready pod -l app=traffic-generator -n workload-system --timeout=60s 2>/dev/null || true
+	@echo "Streaming logs (Ctrl+C to detach):"
+	@kubectl logs -f -l app=traffic-generator -n workload-system 2>/dev/null || true
+
+app-test-traffic-job-delete:
+	@kubectl delete job traffic-generator -n workload-system --ignore-not-found
 
 verify:
 	@chmod +x scripts/verify-metrics.sh
@@ -165,7 +193,7 @@ app-build-docker: build-docker
 app-docker-build: build-docker
 app-deploy: deploy
 app-port-forward: port-forward
-app-test-traffic: test-traffic
+app-test-traffic: app-test-traffic-job
 app-verify: verify
 app-swagger: swagger
 app-undeploy: undeploy

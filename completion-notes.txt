@@ -101,3 +101,94 @@ Yes, Epic 5 is 100% complete end-to-end.
   and pod scaling primitives that make up the heart of the project.
   • Adopt a Kubernetes-native dev orchestrator like Tilt or Skaffold (or a single master Makefile workflow). This
   gives you the exact one-command "Docker Compose experience" while executing on a real local cluster (KinD / K3d).
+
+
+## Rate Limiting
+
+  make app-test-traffic deploys the traffic Job, which causes a burst of
+  Kubernetes events (pod creates, deployment changes, metric spikes) — each event triggers the AA
+  controller's reconcile loop, in addition to the 15s timer. So you get a storm of reconciles right
+  at startup.
+
+  This is a known Kubernetes operator pattern issue — the controller reconciles on both events AND
+  the polling timer, without debouncing. The result: rapid-fire reasoner calls during any cluster
+  change, burning OpenAI API budget.
+
+  The fix is rate-limiting the work queue in the controller. What does the operator reconcile loop
+  look like? Specifically, is there a ratelimiter or RateLimitingQueue configured?
+
+
+## 3 Approaches for RAG
+
+## Comparison against HPA
+
+## Optimizing the call (reasoning no token)
+
+is the meat of the response (reasoning) even required when running llama locally to reduce output token ?
+▸ Thought for 23s
+
+  Sharp observation. Let me look at the schema and what the operator actually consumes downstream before answering:
+
+● Explored 1 file (recommendation.py)
+● Ran 2 commands (grep -n "reasoning\|... · grep -n "Reasoning\|...)
+● Explored 2 files (client.go, agenticautoscaler_controller.go) (ctrl+o to expand)
+
+  I have everything I need. Here's the precise answer:
+  ──────
+  ## Yes — reasoning is pure audit log text. It drives zero control decisions.
+  Here's exactly what it's used for in the entire codebase:
+   Location                             │ Usage                                       │ Control impact?
+  ──────────────────────────────────────┼─────────────────────────────────────────────┼──────────────────────────────────────
+   controller.go:326                    │ logger.Info("... reasoning", rec.Reasoning) │ ❌ Logged only
+   scaling.py:64                        │ Printed to stdout                           │ ❌ Logged only
+   mcp_client.py                        │ rec.reasoning = "[Enriched via MCP] ..."    │ ❌ String prefix only
+  The actual control flow only reads: target_replicas, action, confidence_score, and primary_metric_driver. That's it.
+  ──────
+  ## What This Means for Token Count
+  The reasoning field in the operator logs is typically 100–250 tokens of prose — that's roughly 40–60% of the total LLM
+  output. So yes, stripping or truncating it is the highest-leverage output compression you can do.
+
+  But there's a crucial nuance: for small models, reasoning isn't just for humans — it's implicit chain-of-thought. The model
+  "thinks out loud" in that field before committing to target_replicas. If you remove it, a 3B model jumps straight to a
+  number without internal reasoning steps, which measurably hurts decision accuracy. This is well-documented in the LLM
+  literature.
+  ──────
+  ## The Right Solution: Scratchpad Pattern
+  Don't remove reasoning from the schema — move it outside the structured output schema by splitting into two calls or using
+  a "think then answer" prompt:
+    # Two-step approach (adds one round-trip but output tokens are tiny):
+    Step 1 → free-form LLM thinking (not parsed, just generation)
+    Step 2 → structured output with ONLY: action, target_replicas, confidence_score, primary_metric_driver
+
+  Better: make reasoning optional with a short cap in the schema, so the model still chain-of-thinks but you bound the output
+  tokens:
+    # In recommendation.py — for the local-LLM variant:
+    reasoning: Optional[str] = Field(
+        default=None,
+        max_length=200,          # hard cap → ~50 tokens max
+        description="Brief justification (1–2 sentences)"
+    )
+
+  Or define a slim schema specifically for local inference:
+
+    class SlimScalingDecision(BaseModel):
+        target_replicas: int = Field(..., ge=1)
+        action: ScalingAction
+        confidence_score: float = Field(..., ge=0.0, le=1.0)
+        primary_metric_driver: str = Field(default="METRICS_AGGREGATE")
+        # No reasoning field at all
+
+  Then in the reasoner, generate reasoning post-hoc deterministically from the numbers — exactly the way heuristic.py already
+  does it. You get the audit log for free with zero LLM tokens spent.
+  ──────
+  ## Token Math Summary
+
+   Schema                                  │ Approx output tokens                   │ Inference time (3B/M2)
+  ─────────────────────────────────────────┼────────────────────────────────────────┼────────────────────────────────────────
+   Full ScalingRecommendationResponse      │ ~280 tokens                            │ ~3.5–5 s
+   reasoning capped at 50 tokens           │ ~130 tokens                            │ ~1.6–2.5 s
+   SlimScalingDecision (no reasoning)      │ ~60 tokens                             │ ~0.8–1.2 s
+   Slim + post-hoc deterministic reasoning │ ~60 tokens                             │ ~0.8–1.2 s + <1 ms
+
+  Slim schema + deterministic reasoning reconstruction brings local 3B inference close to Groq territory and well under
+  OpenAI's current 4.2 s.

@@ -18,3 +18,4 @@ spec:
   scaleDownHysteresisSeconds: 600
   targetCPUUtilization: 70
   reasonerURL: "http://reasoner-service.workload-system.svc.cluster.local:8000/evaluate-scaling"
+  prometheusURL: "http://prometheus-server.monitoring.svc.cluster.local:80"

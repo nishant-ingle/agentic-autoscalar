@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 def get_chat_model(
     provider: str = "openai",
     model_name: Optional[str] = None,
-    temperature: float = 0.1
+    temperature: float = 0.1,
+    streaming: bool = False,
 ) -> Optional[BaseChatModel]:
     """
     Instantiates a LangChain ChatModel instance based on the specified provider.
@@ -30,12 +31,16 @@ def get_chat_model(
             return None
         from langchain_openai import ChatOpenAI
         base_url = os.getenv("OPENAI_API_BASE")
-        return ChatOpenAI(
+        kwargs = dict(
             model=model_name or "gpt-4o-mini",
             temperature=temperature,
             api_key=api_key,
-            base_url=base_url
         )
+        if base_url:
+            kwargs["base_url"] = base_url
+        if streaming:
+            kwargs["streaming"] = True
+        return ChatOpenAI(**kwargs)
 
     elif provider == "groq":
         api_key = os.getenv("GROQ_API_KEY")
@@ -44,11 +49,14 @@ def get_chat_model(
             return None
         try:
             from langchain_groq import ChatGroq
-            return ChatGroq(
+            groq_kwargs = dict(
                 model_name=model_name or "llama-3.3-70b-versatile",
                 temperature=temperature,
-                groq_api_key=api_key
+                groq_api_key=api_key,
             )
+            if streaming:
+                groq_kwargs["streaming"] = True
+            return ChatGroq(**groq_kwargs)
         except ImportError:
             logger.warning("langchain-groq not installed; falling back to heuristic engine.")
             return None
@@ -60,11 +68,14 @@ def get_chat_model(
             return None
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(
+            gemini_kwargs = dict(
                 model=model_name or "gemini-1.5-flash",
                 temperature=temperature,
-                google_api_key=api_key
+                google_api_key=api_key,
             )
+            if streaming:
+                gemini_kwargs["streaming"] = True
+            return ChatGoogleGenerativeAI(**gemini_kwargs)
         except ImportError:
             logger.warning("langchain-google-genai not installed; falling back to heuristic engine.")
             return None
