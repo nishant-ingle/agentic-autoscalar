@@ -278,19 +278,16 @@ reasoner-deploy: reasoner-docker-build
 	@echo "Ensuring namespace $(NAMESPACE_WORKLOAD) exists..."
 	kubectl apply -f k8s/namespace.yaml
 	@echo "Configuring in-cluster LLM credentials secret (if available in .env or environment)..."
-	@API_KEY=$$(grep -E "^OPENAI_API_KEY=" ../.env .env 2>/dev/null | head -n 1 | cut -d "=" -f2- | tr -d "\"'" || true); \
-	if [ -z "$$API_KEY" ]; then API_KEY="$$OPENAI_API_KEY"; fi; \
-	API_BASE=$$(grep -E "^OPENAI_API_BASE=" ../.env .env 2>/dev/null | head -n 1 | cut -d "=" -f2- | tr -d "\"'" || true); \
-	if [ -z "$$API_BASE" ]; then API_BASE="$${OPENAI_API_BASE:-https://api.openai.com/v1}"; fi; \
+	@API_KEY=$$(grep -E "^GROQ_API_KEY=" ../.env .env 2>/dev/null | head -n 1 | cut -d "=" -f2- | tr -d "\"'" || true); \
+	if [ -z "$$API_KEY" ]; then API_KEY="$$GROQ_API_KEY"; fi; \
 	if [ -n "$$API_KEY" ]; then \
-		echo "Detected OPENAI_API_KEY. Creating/updating Kubernetes secret 'reasoner-llm-secret' in $(NAMESPACE_WORKLOAD)..."; \
+		echo "Detected GROQ_API_KEY. Creating/updating Kubernetes secret 'reasoner-llm-secret' in $(NAMESPACE_WORKLOAD)..."; \
 		kubectl create secret generic reasoner-llm-secret \
 			--namespace $(NAMESPACE_WORKLOAD) \
-			--from-literal=OPENAI_API_KEY="$$API_KEY" \
-			--from-literal=OPENAI_API_BASE="$$API_BASE" \
+			--from-literal=GROQ_API_KEY="$$API_KEY" \
 			--dry-run=client -o yaml | kubectl apply -f - ; \
 	else \
-		echo "No OPENAI_API_KEY detected in .env or environment; deploying reasoner in deterministic heuristic fallback mode."; \
+		echo "No GROQ_API_KEY detected in .env or environment; deploying reasoner in deterministic heuristic fallback mode."; \
 	fi
 	@echo "Deploying reasoner service to cluster..."
 	kubectl apply -f k8s/reasoner-deployment.yaml

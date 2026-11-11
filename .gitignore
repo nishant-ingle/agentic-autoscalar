@@ -1,2 +1,6 @@
 .aider*
-.env
+.env*
+__pycache__/
+venv/
+go.sum
+vendor/

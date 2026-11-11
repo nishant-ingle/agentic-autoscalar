@@ -69,7 +69,7 @@
 			make operator-verify
 
 	[t3: fastapi/langgraph app]
-		# Automatically creates reasoner-llm-secret if OPENAI_API_KEY is found in .env / env vars
+		# Automatically creates reasoner-llm-secret if GROQ_API_KEY is found in .env / env vars
 		make reasoner-deploy
 		make reasoner-logs
 		make reasoner-undeploy

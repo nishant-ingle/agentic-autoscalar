@@ -18,9 +18,11 @@ class Settings(BaseSettings):
     timeout_seconds: float = 15.0
 
     # Provider settings
-    llm_provider: str = "openai"
+    # llm_provider: str = "openai"
+    # llm_model: str = "gpt-4o-mini"
+    llm_provider: str = "groq"
+    llm_model: str = "openai/gpt-oss-120b"
     llm_temperature: float = 0.1
-    llm_model: str = "gpt-4o-mini"
     max_retries: int = 2
 
     # Target thresholds

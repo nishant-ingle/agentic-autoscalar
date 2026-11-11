@@ -27,9 +27,9 @@ spec:
             - name: PORT
               value: "8000"
             - name: LLM_PROVIDER
-              value: "openai"
+              value: "groq"
             - name: LLM_MODEL
-              value: "gpt-4o-mini"
+              value: "openai/gpt-oss-120b"
             - name: MCP_SERVER_URL
               value: "http://mcp-server.workload-system.svc.cluster.local:8001/mcp"
             - name: PGHOST
@@ -46,17 +46,11 @@ spec:
               value: "true"
             - name: HF_HOME
               value: "/app/.cache/huggingface"
-            - name: OPENAI_API_KEY
+            - name: GROQ_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: reasoner-llm-secret
-                  key: OPENAI_API_KEY
-                  optional: true
-            - name: OPENAI_API_BASE
-              valueFrom:
-                secretKeyRef:
-                  name: reasoner-llm-secret
-                  key: OPENAI_API_BASE
+                  key: GROQ_API_KEY
                   optional: true
           ports:
             - name: http-reasoner

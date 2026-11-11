@@ -1,0 +1,9 @@
+# Place this in your project_root/.codex/config.toml
+[workspace]
+# Stop the background indexer from aggressively parsing files
+indexing_mode = "manual" 
+
+[features]
+# Turn off ambient multi-line ghost text completions 
+# (This prevents continuous token burn on every single pause/keystroke)
+inline_completions = false 

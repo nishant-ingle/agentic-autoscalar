@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_chat_model(
-    provider: str = "openai",
+    # "openai"
+    provider: str = "groq",
     model_name: Optional[str] = None,
     temperature: float = 0.1,
     streaming: bool = False,
@@ -50,7 +51,7 @@ def get_chat_model(
         try:
             from langchain_groq import ChatGroq
             groq_kwargs = dict(
-                model_name=model_name or "llama-3.3-70b-versatile",
+                model_name=model_name or "openai/gpt-oss-120b",
                 temperature=temperature,
                 groq_api_key=api_key,
             )
