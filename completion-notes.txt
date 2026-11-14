@@ -192,3 +192,10 @@ is the meat of the response (reasoning) even required when running llama locally
 
   Slim schema + deterministic reasoning reconstruction brings local 3B inference close to Groq territory and well under
   OpenAI's current 4.2 s.
+
+
+  ## UI for services
+
+
+  ## Script to set model in all configs
+

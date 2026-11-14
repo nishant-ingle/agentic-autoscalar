@@ -220,6 +220,6 @@ Every user story is structured with precise acceptance criteria, pre-requisites,
 
 #### **Acceptance Criteria:**
 
-* [ ] Locust script successfully drives reproducible, high-concurrency traffic loads against target endpoints.
-* [ ] Evaluation harness automatically exports time-series metrics into clean comparison datasets.
-* [ ] Final report generates clean charts demonstrating the comparative resilience, response time, and stability of the Agentic Autoscaler against Standard HPA.
+* [x] Locust script successfully drives reproducible, high-concurrency traffic loads against target endpoints.
+* [x] Evaluation harness automatically exports time-series metrics into clean comparison datasets.
+* [x] Final report generates clean charts demonstrating the comparative resilience, response time, and stability of the Agentic Autoscaler against Standard HPA.

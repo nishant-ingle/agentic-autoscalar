@@ -1,0 +1,24 @@
+{
+  "hpa": {
+    "p99_mean_ms": 581.96,
+    "p99_max_ms": 2715.0,
+    "sla_violations": 3016,
+    "sla_violation_rate_pct": 25.22,
+    "reaction_time_seconds": 0.2,
+    "flapping_events": 0
+  },
+  "agentic": {
+    "p99_mean_ms": 50.72,
+    "p99_max_ms": 64.25,
+    "sla_violations": 0,
+    "sla_violation_rate_pct": 0.0,
+    "reaction_time_seconds": 0.1,
+    "flapping_events": 0,
+    "guardrail_interceptions": 7
+  },
+  "delta": {
+    "p99_peak_reduction_pct": 97.6,
+    "sla_violation_reduction_pct": 100.0,
+    "reaction_time_speedup_x": 2.0
+  }
+}

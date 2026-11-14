@@ -134,12 +134,48 @@
 			# 3. Run the automated Epic 6 acceptance verification script
 			make verify-guardrails
 
-Stage          │ Target Microservice … │ Kubernetes Operator (oper… │ AI Reasoner Layer (reasone… │ MCP Server (mcp-*)    │ Operational RAG (rag-*)    │ Safety Guardrails (guardrails-*)
-───────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────────
-Test           │ N/A                   │ make operator-verify       │ make reasoner-test          │ make mcp-test         │ make rag-test              │ make guardrails-test
-Build Docker   │ make app-docker-build │ make operator-docker-build │ make reasoner-docker-build  │ make mcp-docker-build │ make rag-docker-build      │ make operator-docker-build
-Run Local      │ N/A                   │ make operator-run          │ make reasoner-run           │ make mcp-run          │ make rag-seed              │ make operator-run
-Deploy Cluster │ make app-deploy       │ make operator-deploy       │ make reasoner-deploy        │ make mcp-deploy       │ make rag-deploy            │ make operator-deploy
-Stream Logs    │ make app-logs         │ make operator-logs         │ make reasoner-logs          │ make mcp-logs         │ make rag-logs              │ make operator-logs
-Verify / Test  │ make app-test-traffic │ make operator-verify       │ make reasoner-verify        │ make verify-mcp       │ make rag-verify            │ make verify-guardrails
-Undeploy       │ make app-undeploy     │ make operator-undeploy     │ make reasoner-undeploy      │ make mcp-undeploy     │ make rag-undeploy          │ make operator-undeploy
+	[t7: comparative evaluation harness (locust & hpa benchmarking)]
+		local-test (unit & simulation tests):
+			# 1. Run the automated pytest suite (15 specs covering Locust profiles, shape generator, metrics collector, and analyzer)
+			make evaluation-test
+
+			# 2. Run the comparative evaluation benchmark runner in simulation mode
+			PYTHONPATH=. ../venv/bin/python -m evaluation.benchmark_runner --mode simulation --stage-duration 5 --output-dir evaluation/results
+
+			# 3. Process time-series datasets and generate comparison charts + Markdown report
+			make evaluation-analyze
+
+			# 4. Run the end-to-end Epic 7 acceptance verification script
+			make verify-evaluation
+
+		cluster-test (live cluster benchmarking against target-workload):
+			# 1. Ensure target workload, Prometheus, reasoner, and operator are deployed
+			make deploy
+			make operator-deploy
+			make reasoner-deploy
+			make mcp-deploy
+
+			# 2. Open port-forwards in background or separate terminals
+			make port-forward
+
+			# 3. Apply standard HPA for baseline comparison or delete to test Agentic Autoscaler
+			make evaluation-hpa-apply
+			make evaluation-hpa-delete
+
+			# 4. Execute live comparative benchmark runner against the cluster (Locust drives live traffic to target endpoints)
+			make evaluation-run
+
+			# 5. Generate and view final evaluation report & charts
+			make evaluation-analyze
+			cat evaluation/results/evaluation_report.md
+			open evaluation/results/latency_over_time.png
+
+Stage          │ Target Microservice … │ Kubernetes Operator (oper… │ AI Reasoner Layer (reasone… │ MCP Server (mcp-*)    │ Operational RAG (rag-*)    │ Safety Guardrails (guardrails-*) │ Comparative Evaluation (evaluation-*)
+───────────────┼───────────────────────┼────────────────────────────┼─────────────────────────────┼───────────────────────┼────────────────────────────┼──────────────────────────────────┼──────────────────────────────────────
+Test           │ N/A                   │ make operator-verify       │ make reasoner-test          │ make mcp-test         │ make rag-test              │ make guardrails-test             │ make evaluation-test
+Build Docker   │ make app-docker-build │ make operator-docker-build │ make reasoner-docker-build  │ make mcp-docker-build │ make rag-docker-build      │ make operator-docker-build       │ N/A (Harness runs on host / in venv)
+Run Local      │ N/A                   │ make operator-run          │ make reasoner-run           │ make mcp-run          │ make rag-seed              │ make operator-run                │ make evaluation-run
+Deploy Cluster │ make app-deploy       │ make operator-deploy       │ make reasoner-deploy        │ make mcp-deploy       │ make rag-deploy            │ make operator-deploy             │ make evaluation-hpa-apply
+Stream Logs    │ make app-logs         │ make operator-logs         │ make reasoner-logs          │ make mcp-logs         │ make rag-logs              │ make operator-logs               │ N/A (Locust terminal output)
+Verify / Test  │ make app-test-traffic │ make operator-verify       │ make reasoner-verify        │ make verify-mcp       │ make rag-verify            │ make verify-guardrails           │ make verify-evaluation
+Undeploy       │ make app-undeploy     │ make operator-undeploy     │ make reasoner-undeploy      │ make mcp-undeploy     │ make rag-undeploy          │ make operator-undeploy           │ make evaluation-hpa-delete

@@ -4,7 +4,8 @@
 	reasoner-test reasoner-run reasoner-docker-build reasoner-deploy reasoner-logs reasoner-verify verify-reasoner reasoner-port-forward reasoner-undeploy \
 	mcp-test mcp-run mcp-docker-build mcp-deploy mcp-logs mcp-verify verify-mcp mcp-port-forward mcp-undeploy \
 	rag-test rag-seed rag-docker-build rag-deploy rag-logs rag-verify verify-rag rag-clean-db rag-port-forward rag-undeploy \
-	guardrails-test operator-guardrails-test verify-guardrails guardrails-verify epic6-verify
+	guardrails-test operator-guardrails-test verify-guardrails guardrails-verify epic6-verify \
+	evaluation-test evaluation-run evaluation-analyze verify-evaluation evaluation-verify epic7-verify evaluation-hpa-apply evaluation-hpa-delete
 
 NAMESPACE_WORKLOAD := workload-system
 NAMESPACE_MONITORING := monitoring
@@ -80,6 +81,14 @@ help:
 	@echo "Deterministic Guardrails & Safety Barrier (Epic 6 - Go Controller):"
 	@echo "  make guardrails-test       (or make operator-guardrails-test) Run guardrails and reasoner unit tests"
 	@echo "  make verify-guardrails     (or make guardrails-verify, epic6-verify) Run Epic 6 acceptance verification"
+	@echo ""
+	@echo "Comparative Evaluation Harness (Epic 7 - Locust & HPA Benchmarking):"
+	@echo "  make evaluation-test       Run pytest test suite for Epic 7 evaluation harness"
+	@echo "  make evaluation-run        Run comparative load benchmark across HPA and Agentic Autoscaler"
+	@echo "  make evaluation-analyze    Process time-series datasets and generate comparison charts & report"
+	@echo "  make verify-evaluation     (or make evaluation-verify, epic7-verify) Run Epic 7 acceptance verification"
+	@echo "  make evaluation-hpa-apply  Apply Standard Kubernetes HPA manifest to cluster"
+	@echo "  make evaluation-hpa-delete Delete Standard Kubernetes HPA from cluster"
 	@echo "================================================================================"
 
 # ==============================================================================
@@ -442,5 +451,40 @@ verify-guardrails:
 
 guardrails-verify: verify-guardrails
 epic6-verify: verify-guardrails
+
+# ==============================================================================
+# 7. Comparative Evaluation Harness (Epic 7 - Locust & HPA Benchmarking)
+# ==============================================================================
+
+evaluation-test:
+	@echo "Running Epic 7 evaluation harness test suite (15 specs)..."
+	PYTHONPATH=. ../venv/bin/pytest evaluation/tests -v
+
+evaluation-run:
+	@echo "Running comparative evaluation benchmark..."
+	PYTHONPATH=. ../venv/bin/python -m evaluation.benchmark_runner --mode auto --output-dir evaluation/results
+
+evaluation-analyze:
+	@echo "Analyzing evaluation datasets and generating comparison charts..."
+	PYTHONPATH=. ../venv/bin/python -m evaluation.analyze_results \
+		--hpa-csv evaluation/results/hpa_metrics.csv \
+		--agentic-csv evaluation/results/agentic_metrics.csv \
+		--output-dir evaluation/results
+
+verify-evaluation:
+	@chmod +x scripts/verify-evaluation.sh
+	@./scripts/verify-evaluation.sh
+
+evaluation-verify: verify-evaluation
+epic7-verify: verify-evaluation
+
+evaluation-hpa-apply:
+	@echo "Applying Standard Kubernetes HPA manifest..."
+	kubectl apply -f k8s/hpa.yaml
+
+evaluation-hpa-delete:
+	@echo "Deleting Standard Kubernetes HPA..."
+	-kubectl delete -f k8s/hpa.yaml --ignore-not-found
+
 
 
